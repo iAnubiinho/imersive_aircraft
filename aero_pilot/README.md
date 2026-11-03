@@ -292,3 +292,70 @@ seguido de `netId resolvido pelo client: slot 1 <n>`, **sem** nenhuma linha
 do harness cobrem as regressões (handles inválidos, netId pendente, falso
 `JET_DESTROYED`, delete duplo, despawn pendente, supressão da native e recusa de
 delete em handle cru).
+
+---
+
+## 12. Radar sem contatos — regressão corrigida e diagnóstico
+
+**Sintoma relatado:** depois da correção de entidades inválidas, as aeronaves
+deixaram de aparecer tanto no tablet ATC de Forte Zancudo quanto no mini-radar
+de bordo.
+
+**Causa:** `collectVehicle` (em `server/main.lua`) passou a exigir um netId
+válido para incluir um contato: `if not netId then return nil end`. Ocorre que a
+obtenção do netId no servidor (`0x9E35DAB6`) é **justamente** a native que falha
+no artifact em questão. Resultado: todos os veículos eram descartados e
+`allAircraft` ficava vazio — os dois radares dependem dele. Foi uma regressão da
+própria correção de entidade inválida, não uma falha de criação de aeronaves.
+
+**Correção (sem alterar as regras de identificação):**
+
+1. `collectVehicle` **nunca mais descarta** uma aeronave por falta de netId. Usa
+   `AeroEntity.NetId(veh)` quando disponível e, caso contrário, o próprio handle
+   do servidor como `contactId` estável apenas para exibição. O campo
+   `realNetId` distingue os dois casos.
+2. **Missões continuam server-authoritative:** `AeroRadarSnapshot` (usado por
+   `resolveTarget`) só indexa contatos com `realNetId` válido. Contatos sem
+   netId aparecem nos radares, mas não podem ser alvo — `resolveTarget` devolve
+   `ALVO NÃO ESTÁ NO RADAR NESTE MOMENTO`. Não há simulação de alvo.
+3. **Identificação preservada:** `syncState` agora guarda o estado sanitizado
+   também em `stateByHandle[veh]` (cache Lua), além do statebag. Se o statebag
+   não for legível no artifact, `collectVehicle` usa o cache — o transponder
+   continua identificando o contato. O cache é limpo quando a entidade sai de
+   `GetAllVehicles()` (sem entidades órfãs).
+4. `syncState` também marca `activePilots[src] = true` após validar o assento
+   `-1`. Assim o radar de bordo volta a receber `airTraffic` mesmo que o evento
+   `setPilotActive` tenha se perdido num restart/relog.
+5. IDs enviados ao ATC e ao radar de bordo preferem `realNetId`, mantendo o menu
+   contextual de missões funcional quando o netId é conhecido.
+
+### Comando de diagnóstico
+
+No console do servidor (ou por ADM): `aero_radar_debug`. Imprime, sem depender
+de suposições:
+
+- pilotos e controladores ativos; `Config.Radar.Enabled`,
+  `Config.ControllerRadar.Enabled` e o intervalo do tick;
+- `veículos` vistos em `GetAllVehicles()` x `incluídos` no último tick;
+- descartes por etapa (`inexistente`, `tipo`, `inativo`, `coords`, `semNetId`);
+- `syncState`: recebidos, rejeitados, último `src` e motivo
+  (`payload inválido`, `NetworkGetEntityFromNetworkId não resolveu o netId`,
+  `jogador não está no assento -1`);
+- abertura do ATC: pedidos, aprovados, negados e motivo
+  (`jogador longe da estação`, `sem permissão na estação`, estações
+  desabilitadas);
+- quantidade de contatos no snapshot das missões e uma amostra por veículo com
+  tipo, piloto, motor, estado, transponder e netId.
+
+Interpretação objetiva: `veículos=0` indica que o servidor não está vendo as
+aeronaves (OneSync/escopo); `inativo` alto indica aeronave sem piloto, sem motor
+e sem bateria; `syncState rejeitados` alto explica contatos nunca identificados;
+`controladores ativos=0` explica o tablet vazio.
+
+### Verificação em VM (sem runtime FiveM)
+
+`tests/validate.sh` → 15 Lua / 3 JS / referências OK; parse em Lua 5.3 real →
+15/15; simulação de integração do `server/main.lua` com stubs:
+com netId normal `snapshot=1, atcContacts=1, onboardTraffic=1`; **com a native
+de netId falhando** `snapshot=0, atcContacts=1, onboardTraffic=1` — ou seja, os
+radares continuam exibindo contatos mesmo quando a native falha.

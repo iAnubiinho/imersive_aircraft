@@ -107,3 +107,25 @@ que era host de IA.
 - Contato visual nunca estabelecido → em OneSync Infinity o alvo pode não estar streamado no host; reduza `VisualRangeMeters` ou use `VisualLosRequired = false`.
 - Disparo dentro de LS → **falha grave**: conferir `Config.Missions.ProtectedZones` e `order.zones`.
 - `Tried to access invalid entity` reaparecer → ativar `Config.Missions.Debug`, conferir a ordem dos `server_scripts` (`entity_guard.lua` **primeiro**) e aumentar `SpawnGraceMs` / `StreamingGraceMs` se o OneSync do servidor registrar entidades lentamente.
+
+---
+
+## Diagnóstico: radar sem contatos
+
+Antes de testar qualquer missão, rodar no console do servidor:
+
+```
+aero_radar_debug
+```
+
+Conferir `Pilotos ativos`, `Controladores ativos`, `veículos`, `incluídos`,
+`Descartes` e `syncState`. Se `veículos > 0` e `incluídos = 0`, a coluna de
+descarte diz exatamente qual etapa barrou as aeronaves. O comando é somente de
+leitura, não cria entidades nem altera missões.
+
+Roteiro mínimo para popular os radares: entrar como piloto em uma aeronave,
+ligar bateria + transponder (`I`) no cockpit e abrir o tablet ATC junto à estação
+de Forte Zancudo (`E`). O mini-radar de bordo mostra **outras** aeronaves com
+transponder ligado dentro de `Config.Radar.MaxRangeMeters`; o tablet ATC mostra
+contatos identificados ou não identificados acima de
+`Config.ControllerRadar.UnidentifiedMinAltitude`.

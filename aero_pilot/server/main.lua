@@ -9,6 +9,19 @@ local activeControllers = AeroActiveControllers
 -- Snapshot do radar publicado para o gerenciador de missões (fonte de detecção)
 AeroRadarSnapshot = {}
 local QBCore = nil
+-- Cache Lua do estado enviado pelo cliente. Statebags podem não ser legíveis
+-- em alguns artifacts; isto mantém a identificação por transponder funcionando.
+local stateByHandle = {}
+-- Contadores para o comando de diagnóstico aero_radar_debug (somente leitura).
+AeroRadarDiag = {
+    syncReceived = 0, syncRejected = 0, syncLastSrc = nil, syncLastAt = 0,
+    syncLastReason = '',
+    ctrlRequests = 0, ctrlApproved = 0, ctrlRejected = 0, ctrlLastReason = '',
+    tickVehicles = 0, tickIncluded = 0, tickAt = 0,
+    drop = { exists = 0, type = 0, inactive = 0, coords = 0 },
+    noNetId = 0,
+    sample = {},
+}
 
 -- Alguns artifacts não expõem todas as natives de entidade no servidor;
 -- o radar original continua intacto mesmo que uma delas falte.
@@ -91,25 +104,35 @@ end)
 
 RegisterNetEvent('aero_pilot:server:requestOpenController', function(stationIndex)
     local src = source
-    if not Config.ControllerRadar or not Config.ControllerRadar.Enabled then return end
+    AeroRadarDiag.ctrlRequests = AeroRadarDiag.ctrlRequests + 1
+    local function reject(reason)
+        AeroRadarDiag.ctrlRejected = AeroRadarDiag.ctrlRejected + 1
+        AeroRadarDiag.ctrlLastReason = reason
+    end
+    if not Config.ControllerRadar or not Config.ControllerRadar.Enabled then
+        reject('ControllerRadar desabilitado'); return
+    end
 
     local idx = tonumber(stationIndex)
     local station = idx and Config.ControllerRadar.Stations and Config.ControllerRadar.Stations[idx]
-    if not station then return end
+    if not station then reject('estação inexistente: ' .. tostring(stationIndex)); return end
 
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 or not DoesEntityExist(ped) then return end
     local pCoords = GetEntityCoords(ped)
     local sCoords = vector3(station.coords.x, station.coords.y, station.coords.z)
     if #(pCoords - sCoords) > ((Config.ControllerRadar.InteractDistance or 2.2) + 4.0) then
-        return
+        reject('jogador longe da estação (> InteractDistance + 4m)'); return
     end
 
     if not hasStationPermission(src, station) then
+        reject('sem permissão na estação')
         TriggerClientEvent('aero_pilot:client:controllerDenied', src, 'Acesso restrito a operadores autorizados.')
         return
     end
 
+    AeroRadarDiag.ctrlApproved = AeroRadarDiag.ctrlApproved + 1
+    AeroRadarDiag.ctrlLastReason = 'ok'
     activeControllers[src] = {
         stationIndex = idx,
         coords = sCoords
@@ -130,18 +153,25 @@ end)
 
 RegisterNetEvent('aero_pilot:server:syncState', function(netId, stateData)
     local src = source
+    AeroRadarDiag.syncReceived = AeroRadarDiag.syncReceived + 1
+    AeroRadarDiag.syncLastSrc = src
+    AeroRadarDiag.syncLastAt = os.time()
+    local function reject(reason)
+        AeroRadarDiag.syncRejected = AeroRadarDiag.syncRejected + 1
+        AeroRadarDiag.syncLastReason = reason
+    end
     if type(netId) ~= 'number' or type(stateData) ~= 'table' then
-        return
+        reject('payload inválido'); return
     end
 
     local veh = AeroEntity.FromNetId(netId)
     if veh == 0 then
-        return
+        reject('NetworkGetEntityFromNetworkId não resolveu o netId'); return
     end
 
     local ped = GetPlayerPed(src)
     if GetPedInVehicleSeat(veh, -1) ~= ped then
-        return
+        reject('jogador não está no assento -1'); return
     end
 
     local sanitized = {
@@ -165,8 +195,57 @@ RegisterNetEvent('aero_pilot:server:syncState', function(netId, stateData)
         updatedAt        = os.time(),
     }
 
-    Entity(veh).state:set('aeroState', sanitized, true)
+    -- Cache Lua PRIMEIRO: garante identificação mesmo se o statebag falhar.
+    stateByHandle[veh] = sanitized
+    AeroRadarDiag.syncLastReason = 'ok'
+    pcall(function() Entity(veh).state:set('aeroState', sanitized, true) end)
+    -- Sempre que o cliente sincroniza, ele está pilotando: mantém o radar de
+    -- bordo ativo mesmo que setPilotActive tenha se perdido (restart/relog).
+    activePilots[src] = true
 end)
+
+-- ---------------------------------------------------------------------------
+-- DIAGNÓSTICO DO RADAR (console do servidor): aero_radar_debug
+-- Mostra exatamente em qual etapa as aeronaves são descartadas.
+-- ---------------------------------------------------------------------------
+local function countKeys(t)
+    local n = 0
+    for _ in pairs(t or {}) do n = n + 1 end
+    return n
+end
+
+RegisterCommand('aero_radar_debug', function(source, args, raw)
+    local d = AeroRadarDiag
+    print('========== AERO PILOT — DIAGNÓSTICO DO RADAR ==========')
+    print(string.format(' Pilotos ativos: %d | Controladores ativos: %d',
+        countKeys(activePilots), countKeys(activeControllers)))
+    print(string.format(' Radar.Enabled=%s ControllerRadar.Enabled=%s intervalo=%sms',
+        tostring(Config.Radar and Config.Radar.Enabled),
+        tostring(Config.ControllerRadar and Config.ControllerRadar.Enabled),
+        tostring((Config.Radar and Config.Radar.TrafficSyncIntervalMs) or 1000)))
+    print(string.format(' Último tick: veículos=%d incluídos=%d (há %ds)',
+        d.tickVehicles, d.tickIncluded, os.time() - (d.tickAt or 0)))
+    print(string.format(' Descartes: inexistente=%d tipo=%d inativo=%d coords=%d',
+        d.drop.exists, d.drop.type, d.drop.inactive, d.drop.coords))
+    print(string.format(' Sem netId (exibidos mesmo assim, não são alvo de missão): %d', d.noNetId))
+    print(string.format(' syncState: recebidos=%d rejeitados=%d último=%s (%s)',
+        d.syncReceived, d.syncRejected, tostring(d.syncLastSrc or '-'),
+        tostring(d.syncLastReason or '-')))
+    print(string.format(' ATC: pedidos=%d aprovados=%d negados=%d motivo=%s',
+        d.ctrlRequests, d.ctrlApproved, d.ctrlRejected, tostring(d.ctrlLastReason or '-')))
+    local snapCount = countKeys(AeroRadarSnapshot) - (AeroRadarSnapshot.byPlate and 1 or 0)
+    print(string.format(' Snapshot para missões: %d contato(s) com netId real', snapCount))
+    local n = 0
+    for handle, line in pairs(d.sample or {}) do
+        print('  veículo ' .. tostring(handle) .. ': ' .. tostring(line))
+        n = n + 1
+        if n >= 12 then print('  ... (amostra limitada a 12)'); break end
+    end
+    if n == 0 then
+        print('  Nenhum veículo amostrado: o laço pode não estar rodando (sem piloto/controlador)')
+    end
+    print('========================================================')
+end, true)
 
 -- ============================================================================
 -- RADAR AÉREO ONESYNC:
@@ -195,28 +274,49 @@ CreateThread(function()
             -- desreferencia a entidade. Retornar nil = descartar este handle.
             -- Isso elimina "Tried to access invalid entity" em 0x9E35DAB6.
             local function collectVehicle(veh)
-                if not AeroEntity.Exists(veh) then return nil end
+                if not AeroEntity.Exists(veh) then
+                    AeroRadarDiag.drop.exists = AeroRadarDiag.drop.exists + 1
+                    return nil
+                end
 
                 local vType = missionSafeNative(GetVehicleType, veh)
-                if vType ~= 'plane' and vType ~= 'heli' then return nil end
+                if vType ~= 'plane' and vType ~= 'heli' then
+                    AeroRadarDiag.drop.type = AeroRadarDiag.drop.type + 1
+                    return nil
+                end
 
                 local driver = missionSafeNative(GetPedInVehicleSeat, veh, -1)
                 local stateBag = AeroEntity.State(veh)
-                local st = stateBag and stateBag.aeroState or nil
+                -- Fallback em Lua: o statebag pode não ser legível em alguns
+                -- artifacts, mas syncState sempre guardou o estado por handle.
+                local st = (stateBag and stateBag.aeroState) or stateByHandle[veh] or nil
                 local engineOn = missionSafeNative(GetIsVehicleEngineRunning, veh) == true
                 local pos = missionSafeNative(GetEntityCoords, veh)
                 local vel = missionSafeNative(GetEntityVelocity, veh)
-                if not pos or not vel then return nil end
+                if not pos or not vel then
+                    AeroRadarDiag.drop.coords = AeroRadarDiag.drop.coords + 1
+                    return nil
+                end
                 local speedMps = math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
 
-                if not ((driver and driver ~= 0) or engineOn or (st and st.batteryOn)) then return nil end
+                if not ((driver and driver ~= 0) or engineOn or (st and st.batteryOn)) then
+                    AeroRadarDiag.drop.inactive = AeroRadarDiag.drop.inactive + 1
+                    return nil
+                end
 
-                -- PONTO CRÍTICO: netId NUNCA é solicitado com handle morto
-                -- nem com handle cru dos nossos caças (AeroEntity.NetId já
-                -- devolve o netId em cache ou nil, sem invocar a native).
-                if not AeroEntity.Exists(veh) then return nil end
-                local netId = AeroEntity.NetId(veh)
-                if not netId then return nil end
+                if not AeroEntity.Exists(veh) then
+                    AeroRadarDiag.drop.exists = AeroRadarDiag.drop.exists + 1
+                    return nil
+                end
+
+                -- REGRESSÃO CORRIGIDA: faltar netId NÃO pode apagar o contato
+                -- dos radares. A native 0x9E35DAB6 falha em alguns artifacts;
+                -- nesse caso usa-se o handle do servidor como ID de exibição.
+                local realNetId = AeroEntity.NetId(veh)
+                if not realNetId then
+                    AeroRadarDiag.noNetId = AeroRadarDiag.noNetId + 1
+                end
+                local contactId = realNetId or veh
 
                 local radarSwitchOn = st and (st.batteryOn == true and st.radarOn == true) or false
                 local plate = missionSafeNative(GetVehicleNumberPlateText, veh) or 'N/A'
@@ -226,7 +326,8 @@ CreateThread(function()
                 local hdg = math.floor(((360.0 - gameHdg) % 360.0) + 0.5) % 360
 
                 local entry = {
-                    netId = netId,
+                    netId = contactId,
+                    realNetId = realNetId,      -- nil = sem netId válido (não é alvo de missão)
                     type = acftType,
                     plate = plate,
                     x = math.floor(pos.x * 10) / 10,
@@ -241,16 +342,36 @@ CreateThread(function()
                     heightAboveGround = missionSafeNative(GetEntityHeightAboveGround, veh) or 0.0,
                     health = missionSafeNative(GetEntityHealth, veh) or 1000,
                 }
+                AeroRadarDiag.sample[tostring(veh)] = string.format(
+                    'tipo=%s piloto=%s motor=%s estado=%s transponder=%s netId=%s',
+                    tostring(vType), tostring(driver ~= nil and driver ~= 0),
+                    tostring(engineOn), tostring(st ~= nil),
+                    tostring(radarSwitchOn), tostring(realNetId or 'FALHOU'))
                 return entry, radarSwitchOn
+            end
+
+            AeroRadarDiag.tickVehicles = #vehicles
+            AeroRadarDiag.tickAt = os.time()
+            AeroRadarDiag.sample = {}
+            AeroRadarDiag.tickIncluded = 0
+            AeroRadarDiag.drop = { exists = 0, type = 0, inactive = 0, coords = 0 }
+            AeroRadarDiag.noNetId = 0
+
+            -- Remove cache de estado de entidades que não existem mais.
+            local liveHandles = {}
+            for i = 1, #vehicles do liveHandles[vehicles[i]] = true end
+            for handle in pairs(stateByHandle) do
+                if not liveHandles[handle] then stateByHandle[handle] = nil end
             end
 
             for i = 1, #vehicles do
                 local entry, radarSwitchOn = collectVehicle(vehicles[i])
                 if entry then
+                    AeroRadarDiag.tickIncluded = AeroRadarDiag.tickIncluded + 1
                     allAircraft[#allAircraft + 1] = entry
                     if radarSwitchOn then
                         onboardTraffic[#onboardTraffic + 1] = {
-                            netId = entry.netId,
+                            netId = entry.realNetId or entry.netId,
                             type = entry.type,
                             plate = entry.plate,
                             x = entry.x,
@@ -268,8 +389,11 @@ CreateThread(function()
             local snapshot = {}
             for i = 1, #allAircraft do
                 local ac = allAircraft[i]
-                snapshot[ac.netId] = {
-                    netId            = ac.netId,
+                -- AUTORIDADE DAS MISSÕES: apenas contatos com netId REAL entram
+                -- no snapshot (resolveTarget / NetworkGetEntityFromNetworkId).
+                if not ac.realNetId then goto continue_snapshot end
+                snapshot[ac.realNetId] = {
+                    netId            = ac.realNetId,
                     plate            = ac.plate,
                     identified       = ac.radarOn == true,
                     radarOn          = ac.radarOn,
@@ -286,8 +410,9 @@ CreateThread(function()
                 }
                 if ac.plate and ac.plate ~= '' and ac.radarOn then
                     snapshot.byPlate = snapshot.byPlate or {}
-                    snapshot.byPlate[ac.plate] = ac.netId
+                    snapshot.byPlate[ac.plate] = ac.realNetId
                 end
+                ::continue_snapshot::
             end
             AeroRadarSnapshot = snapshot
 
@@ -323,7 +448,7 @@ CreateThread(function()
 
                                 atcContacts[#atcContacts + 1] = {
                                     identified = true,
-                                    id = tostring(ac.netId),
+                                    id = tostring(ac.realNetId or ac.netId),
                                     type = ac.type,
                                     plate = ac.plate,
                                     wx = ac.x,
@@ -350,7 +475,7 @@ CreateThread(function()
 
                                 atcContacts[#atcContacts + 1] = {
                                     identified = false,
-                                    id = 'unk_' .. tostring(ac.netId),
+                                    id = 'unk_' .. tostring(ac.realNetId or ac.netId),
                                     wx = math.floor(ux),
                                     wy = math.floor(uy),
                                     distKm = math.floor((dist2D / 1000.0) * 10) / 10,
