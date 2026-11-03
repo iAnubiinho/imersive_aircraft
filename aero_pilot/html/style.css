@@ -1,0 +1,2085 @@
+/* ============================================================================
+   AERO PILOT v2.2 — COCKPIT OBSIDIAN/ÂMBAR LIMPO, RADAR HORÁRIO REAL & ATC MAPA
+   ============================================================================ */
+
+:root {
+    --obsidian-bg: rgba(11, 14, 20, 0.90);
+    --obsidian-card: rgba(17, 22, 30, 0.78);
+    --obsidian-inner: rgba(9, 12, 17, 0.85);
+
+    --amber: #f59e0b;
+    --amber-bright: #fbbf24;
+    --amber-border: rgba(245, 158, 11, 0.42);
+    --amber-glow: rgba(245, 158, 11, 0.32);
+
+    --radar-green: #38ff7a;
+    --radar-mid: #1bcf58;
+    --radar-bg: #041108;
+
+    --led-off: rgba(255, 255, 255, 0.14);
+    --led-green: #34d399;
+    --led-red: #ff4a4a;
+    --led-cyan: #38e8ff;
+
+    --txt-light: #f1f5f9;
+    --txt-mid: #94a3b8;
+    --txt-dim: #526075;
+
+    --hud-dark: rgba(11, 14, 19, 0.90);
+    --font-ui: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    --font-mono: 'Consolas', 'Courier New', monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+}
+
+html, body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: transparent;
+    font-family: var(--font-ui);
+    color: var(--txt-light);
+}
+
+body.browser-preview {
+    background:
+        radial-gradient(circle at 60% 35%, #233346 0%, #121a24 58%, #090d12 100%);
+}
+
+.hidden {
+    display: none !important;
+}
+
+kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--amber-bright);
+    background: rgba(10, 13, 18, 0.95);
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    border-radius: 3px;
+}
+
+/* ============================================================================
+   BARRA DE SIMULAÇÃO DO NAVEGADOR (APENAS FORA DO FIVEM)
+   ============================================================================ */
+.browser-sim-bar {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    background: rgba(11, 14, 20, 0.94);
+    border: 1px solid var(--amber-border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+.sim-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    color: var(--amber);
+    margin-right: 4px;
+}
+
+.sim-sep {
+    color: var(--txt-dim);
+    font-size: 11px;
+}
+
+.sim-btn {
+    background: rgba(24, 30, 40, 0.95);
+    color: var(--txt-light);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sim-btn:hover {
+    border-color: var(--amber);
+}
+
+.sim-btn.active {
+    background: rgba(245, 158, 11, 0.22);
+    border-color: var(--amber);
+    color: var(--amber-bright);
+}
+
+.sim-btn.atc-highlight {
+    background: rgba(56, 255, 122, 0.14);
+    border-color: rgba(56, 255, 122, 0.5);
+    color: var(--radar-green);
+}
+
+/* ============================================================================
+   CUSTOMIZAÇÃO DE POSIÇÃO E TAMANHO (MODO EDIÇÃO QUANDO COCKPIT ABERTO)
+   ============================================================================ */
+.aero-hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+}
+
+.customizable-widget {
+    transform-origin: center center;
+}
+
+.edit-drag-badge {
+    display: none;
+    padding: 2px 7px;
+    margin-bottom: 3px;
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px dashed rgba(245, 158, 11, 0.65);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: var(--amber-bright);
+    text-align: center;
+}
+
+body.hud-edit-mode .customizable-widget {
+    pointer-events: auto;
+    cursor: grab;
+}
+
+body.hud-edit-mode .customizable-widget:hover .edit-drag-badge,
+body.hud-edit-mode .customizable-widget.is-dragging .edit-drag-badge {
+    display: block;
+}
+
+body.hud-edit-mode .customizable-widget.is-dragging {
+    cursor: grabbing;
+    filter: drop-shadow(0 0 12px rgba(245, 158, 11, 0.45));
+}
+
+/* ============================================================================
+   CANTO INFERIOR ESQUERDO: RADAR CIRCULAR DE VARREDURA DA AERONAVE
+   ============================================================================ */
+.radar-module {
+    position: fixed;
+    bottom: 18px;
+    left: 22px;
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.radar-wx-strip {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+}
+
+.wx-sig {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 3px 4px;
+    background: rgba(8, 16, 11, 0.86);
+    border: 1px solid rgba(56, 255, 122, 0.18);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    color: rgba(150, 185, 160, 0.35);
+    transition: all 0.2s ease;
+}
+
+.wx-sig.active-snow {
+    color: #dff6ff;
+    background: rgba(65, 165, 225, 0.24);
+    border-color: #7ad7ff;
+    box-shadow: 0 0 8px rgba(122, 215, 255, 0.28);
+}
+
+.wx-sig.active-rain {
+    color: #79d2ff;
+    background: rgba(30, 125, 215, 0.24);
+    border-color: #4db8ff;
+    box-shadow: 0 0 8px rgba(77, 184, 255, 0.28);
+}
+
+.wx-sig.active-fog {
+    color: #ffe29a;
+    background: rgba(215, 165, 45, 0.22);
+    border-color: #f2be42;
+    box-shadow: 0 0 8px rgba(242, 190, 66, 0.25);
+}
+
+.radar-scope {
+    position: relative;
+    width: 208px;
+    height: 208px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #0a2412 0%, #06180b 62%, #030e06 100%);
+    border: 2.5px solid #28e866;
+    box-shadow:
+        0 0 16px rgba(40, 232, 102, 0.28),
+        inset 0 0 24px rgba(40, 232, 102, 0.16),
+        0 10px 26px rgba(0, 0, 0, 0.72);
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.radar-scope.power-off {
+    border-color: #274030;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.72);
+}
+
+.radar-scope.power-off .radar-sweep-beam {
+    display: none;
+}
+
+.radar-standby {
+    position: absolute;
+    inset: 0;
+    background: rgba(4, 10, 6, 0.80);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    z-index: 6;
+}
+
+.standby-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 1.4px;
+    color: #ff6262;
+}
+
+.standby-sub {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--txt-mid);
+}
+
+.radar-svg-grid {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.radar-svg-grid .grid-lines line {
+    stroke: rgba(56, 255, 122, 0.13);
+    stroke-width: 0.8;
+}
+
+.radar-svg-grid .radar-axis {
+    stroke: rgba(56, 255, 122, 0.42);
+    stroke-width: 1.1;
+}
+
+.radar-svg-grid .radar-ring {
+    fill: none;
+    stroke: rgba(56, 255, 122, 0.45);
+    stroke-width: 1.15;
+}
+
+.radar-svg-grid .radar-ring-outer {
+    fill: none;
+    stroke: rgba(56, 255, 122, 0.75);
+    stroke-width: 1.5;
+}
+
+.radar-wx-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+}
+
+.radar-wx-overlay.wx-rain {
+    opacity: 1;
+    background:
+        radial-gradient(circle at 34% 36%, rgba(40, 170, 255, 0.25) 0%, transparent 42%),
+        radial-gradient(circle at 70% 62%, rgba(56, 255, 122, 0.22) 0%, transparent 38%);
+}
+
+.radar-wx-overlay.wx-snow {
+    opacity: 1;
+    background:
+        radial-gradient(circle at 62% 32%, rgba(205, 242, 255, 0.28) 0%, transparent 44%),
+        radial-gradient(circle at 32% 68%, rgba(150, 225, 255, 0.22) 0%, transparent 38%);
+}
+
+.radar-wx-overlay.wx-fog {
+    opacity: 1;
+    background: radial-gradient(circle, rgba(235, 210, 125, 0.16) 15%, rgba(180, 195, 165, 0.12) 70%, transparent 100%);
+}
+
+/* FEIXE HORÁRIO REAL (igual image-2.png):
+   Ponteiro verde brilhante em 360°/0° avançando em sentido horário (0deg -> 360deg)
+   e deixando o rastro fosforescente suave para trás (290deg -> 360deg)! */
+.radar-sweep-beam {
+    position: absolute;
+    inset: -4%;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        transparent 288deg,
+        rgba(56, 255, 122, 0.03) 304deg,
+        rgba(56, 255, 122, 0.14) 332deg,
+        rgba(56, 255, 122, 0.36) 354deg,
+        rgba(92, 255, 148, 0.62) 360deg
+    );
+    animation: radarSweepClockwise 3.2s linear infinite;
+    pointer-events: none;
+}
+
+.sweep-needle {
+    position: absolute;
+    left: calc(50% - 1px);
+    top: 4%;
+    width: 2px;
+    height: 46%;
+    background: linear-gradient(to top, rgba(110, 255, 160, 0.6), #7dffad);
+    box-shadow: 0 0 6px #4dff8b;
+    border-radius: 1px;
+}
+
+@keyframes radarSweepClockwise {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.radar-north-ring {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transition: transform 0.14s linear;
+}
+
+.north-tag {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0 4px;
+    background: rgba(4, 17, 8, 0.9);
+    border: 1px solid rgba(56, 255, 122, 0.55);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 900;
+    color: var(--radar-green);
+}
+
+.radar-targets-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.radar-blip {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    margin-top: -9px;
+    color: var(--radar-green);
+    filter: drop-shadow(0 0 5px rgba(56, 255, 122, 0.9));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: left 0.25s linear, top 0.25s linear;
+}
+
+.radar-blip svg {
+    width: 16px;
+    height: 16px;
+}
+
+.radar-blip.heli-blip {
+    color: #9effbe;
+}
+
+.blip-alt-tag {
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 800;
+    color: #b7ffd0;
+    text-shadow: 0 1px 2px #000;
+    white-space: nowrap;
+}
+
+.radar-wp-marker {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    border: 2px solid var(--amber-bright);
+    transform: rotate(45deg);
+    box-shadow: 0 0 6px var(--amber);
+}
+
+.radar-self-marker {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    transform: translate(-50%, -50%);
+    color: #ffffff;
+    filter: drop-shadow(0 0 4px rgba(56, 255, 122, 0.9));
+    z-index: 3;
+}
+
+.radar-footer {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 9px;
+    background: rgba(8, 16, 11, 0.88);
+    border: 1px solid rgba(56, 255, 122, 0.24);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.radar-traffic-counts {
+    display: flex;
+    gap: 9px;
+    color: #9de8b5;
+}
+
+.trf-cnt b {
+    color: var(--radar-green);
+}
+
+.radar-range-lbl {
+    color: rgba(56, 255, 122, 0.78);
+    font-weight: 700;
+}
+
+/* ============================================================================
+   PAINEL DO COCKPIT ESCURO TRANSLÚCIDO + ÂMBAR LIMPO (v1/v2 RESTAURADO)
+   ============================================================================ */
+.collapsed-pill {
+    pointer-events: auto;
+    position: fixed;
+    top: 32px;
+    left: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 13px;
+    background: var(--obsidian-bg);
+    border: 1px solid var(--amber-border);
+    border-left: 3px solid var(--amber);
+    border-radius: 4px;
+    color: var(--txt-light);
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+
+.pill-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+}
+
+.pill-led.ready {
+    background: var(--led-green);
+    box-shadow: 0 0 6px var(--led-green);
+}
+
+.pill-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.cockpit-panel {
+    pointer-events: auto;
+    position: fixed;
+    top: 16px;
+    left: 22px;
+    width: 356px;
+    max-height: calc(100vh - 32px);
+    background: var(--obsidian-bg);
+    border: 1px solid var(--amber-border);
+    border-left: 3px solid var(--amber);
+    border-radius: 6px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.72);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(16, 21, 30, 0.92);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.24);
+}
+
+.panel-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-hex-badge {
+    padding: 2px 8px;
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid var(--amber);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 900;
+    font-style: italic;
+    color: var(--amber-bright);
+    letter-spacing: 0.7px;
+}
+
+.panel-sub-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    color: #e2e8f0;
+}
+
+.panel-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.key-hint {
+    font-size: 10px;
+    color: var(--txt-mid);
+}
+
+.btn-icon-Reset {
+    padding: 2px 7px;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 800;
+    color: var(--amber-bright);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-icon-Reset:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.btn-icon-close {
+    width: 22px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    color: var(--txt-mid);
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.btn-icon-close:hover {
+    color: #fff;
+    border-color: var(--amber);
+}
+
+.cockpit-body {
+    padding: 7px 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cockpit-body::-webkit-scrollbar {
+    width: 3px;
+}
+.cockpit-body::-webkit-scrollbar-thumb {
+    background: rgba(245, 158, 11, 0.35);
+    border-radius: 3px;
+}
+
+.switch-group {
+    background: var(--obsidian-card);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 5px;
+    padding: 5px 8px 6px;
+}
+
+.switch-group.group-done {
+    border-color: rgba(52, 211, 153, 0.26);
+}
+
+.group-plate {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.plate-title {
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    color: var(--amber-bright);
+}
+
+.plate-led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--led-off);
+}
+
+.switch-group.group-done .plate-led {
+    background: var(--led-green);
+    box-shadow: 0 0 6px var(--led-green);
+}
+
+.switch-grid {
+    display: grid;
+    gap: 5px;
+}
+.switch-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* Botões / Chaves Limpas Estilo Dark Glass + Âmbar/Verde */
+.cockpit-sw {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 5px 6px;
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 4px;
+    color: var(--txt-light);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cockpit-sw:hover {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(20, 26, 36, 0.92);
+}
+
+.cockpit-sw.sw-on {
+    border-color: rgba(52, 211, 153, 0.48);
+    background: rgba(16, 38, 30, 0.52);
+}
+
+.cockpit-sw.master-red.sw-on {
+    border-color: rgba(245, 158, 11, 0.55);
+    background: rgba(45, 30, 10, 0.45);
+}
+
+.cockpit-sw.radar-green-sw.sw-on {
+    border-color: rgba(56, 255, 122, 0.60);
+    background: rgba(12, 42, 22, 0.58);
+}
+
+.cockpit-sw.sw-warn {
+    border-color: rgba(245, 158, 11, 0.65);
+}
+
+.sw-top-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+}
+
+.sw-led {
+    width: 6px;
+    height: 6px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+    transition: all 0.15s ease;
+}
+
+.cockpit-sw.sw-on .sw-led {
+    background: var(--led-green);
+    box-shadow: 0 0 6px var(--led-green);
+}
+
+.cockpit-sw.sw-warn .sw-led {
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber);
+}
+
+/* Chave Seletora Deslizante Elegante */
+.sw-actuator {
+    position: relative;
+    width: 34px;
+    height: 13px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    transition: all 0.15s ease;
+}
+
+.sw-actuator::after {
+    content: '';
+    position: absolute;
+    top: 1px;
+    left: 2px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #64748b;
+    transition: all 0.16s ease;
+}
+
+.cockpit-sw.sw-on .sw-actuator {
+    background: rgba(52, 211, 153, 0.22);
+    border-color: rgba(52, 211, 153, 0.55);
+}
+
+.cockpit-sw.sw-on .sw-actuator::after {
+    left: 21px;
+    background: var(--led-green);
+    box-shadow: 0 0 6px var(--led-green);
+}
+
+.cockpit-sw.master-red.sw-on .sw-actuator {
+    background: rgba(245, 158, 11, 0.24);
+    border-color: var(--amber);
+}
+
+.cockpit-sw.master-red.sw-on .sw-actuator::after {
+    background: var(--amber-bright);
+    box-shadow: 0 0 6px var(--amber);
+}
+
+.sw-name {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: #cbd5e1;
+    white-space: nowrap;
+}
+
+.sw-name small {
+    color: var(--amber);
+}
+
+.sw-state {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--txt-mid);
+}
+
+.cockpit-sw.sw-on .sw-state {
+    color: var(--led-green);
+}
+
+.cockpit-sw.master-red.sw-on .sw-state {
+    color: var(--amber-bright);
+}
+
+/* Manetes Compactas */
+.cockpit-lever {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+    padding: 5px 6px;
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 4px;
+    color: var(--txt-light);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.cockpit-lever:hover {
+    border-color: rgba(245, 158, 11, 0.55);
+}
+
+.cockpit-lever.sw-on {
+    border-color: rgba(245, 158, 11, 0.42);
+}
+
+.lever-slot {
+    position: relative;
+    width: 42px;
+    height: 11px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 3px;
+}
+
+.lever-knob {
+    position: absolute;
+    top: 1px;
+    left: 2px;
+    width: 11px;
+    height: 7px;
+    border-radius: 2px;
+    transition: left 0.16s ease;
+}
+
+.lever-knob.mix-red {
+    background: #ef4444;
+}
+
+.lever-knob.thr-dark {
+    background: var(--amber-bright);
+}
+
+.lever-knob.pos-bot { left: 2px; }
+.lever-knob.pos-mid { left: 14px; }
+.lever-knob.pos-top { left: 27px; }
+
+/* Ignição / Magnetos */
+.ignition-housing {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.key-cylinder {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, #283140 0%, #11161f 75%);
+    border: 1.5px solid rgba(245, 158, 11, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.key-slot-rotor {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #0b0e14;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease;
+}
+
+.key-blade {
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--amber-bright);
+}
+
+.mag-selector {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+}
+
+.mag-btn {
+    padding: 6px 0;
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 800;
+    color: var(--txt-mid);
+    cursor: pointer;
+    transition: all 0.14s ease;
+}
+
+.mag-btn:hover {
+    color: #fff;
+    border-color: rgba(245, 158, 11, 0.45);
+}
+
+.mag-btn.active {
+    background: rgba(245, 158, 11, 0.20);
+    border-color: var(--amber);
+    color: var(--amber-bright);
+}
+
+.mag-btn.mag-start.cranking {
+    background: var(--amber);
+    color: #0b0e14;
+    box-shadow: 0 0 10px var(--amber-glow);
+}
+
+.crank-bar-wrap {
+    margin-top: 5px;
+}
+
+.crank-bar-head {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: var(--amber-bright);
+    margin-bottom: 2px;
+}
+
+.crank-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.crank-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--amber);
+    transition: width 0.1s linear;
+}
+
+/* Estabilização & Alternador */
+.stab-row {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+}
+
+.mini-gauges {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.mini-inst {
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+
+.inst-lbl {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--txt-dim);
+}
+
+.inst-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--txt-light);
+}
+
+.inst-val.ok { color: var(--led-green); }
+.inst-val.amber { color: var(--amber-bright); }
+
+.alt-switch {
+    width: 88px;
+}
+
+/* Avionics (Piloto Automático / Estabilizador) */
+.avionics-box {
+    border-color: rgba(245, 158, 11, 0.28);
+}
+
+.ap-lcd-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.ap-lcd-chip {
+    padding: 3px 6px;
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--txt-mid);
+    text-align: center;
+}
+
+.ap-lcd-chip.ready {
+    color: var(--led-green);
+    border-color: rgba(52, 211, 153, 0.38);
+}
+
+.ap-knobs-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-bottom: 5px;
+}
+
+.ap-knobs-row.single {
+    grid-template-columns: 1fr;
+}
+
+.ap-Bug {
+    background: var(--obsidian-inner);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 3px 6px;
+}
+
+.bug-lbl {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--txt-dim);
+    margin-bottom: 1px;
+}
+
+.bug-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bug-stepper span {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--amber-bright);
+}
+
+.bug-stepper button {
+    width: 20px;
+    height: 17px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 3px;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.bug-stepper button:hover {
+    border-color: var(--amber);
+}
+
+.avionics-engage-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.48);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: var(--amber-bright);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.avionics-engage-btn:hover {
+    background: rgba(245, 158, 11, 0.22);
+}
+
+.engage-led {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.avionics-engage-btn.engaged {
+    background: rgba(52, 211, 153, 0.18);
+    border-color: var(--led-green);
+    color: #d9ffe9;
+}
+
+.avionics-engage-btn.engaged .engage-led {
+    background: var(--led-green);
+    box-shadow: 0 0 8px var(--led-green);
+}
+
+.panel-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 12px;
+    background: rgba(9, 12, 17, 0.92);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: var(--txt-mid);
+}
+
+/* ============================================================================
+   CANTO INFERIOR DIREITO: HUD DE VELOCIDADE + LUZES ESPIA INTEGRADAS
+   ============================================================================ */
+.telemetry-cluster {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    width: 246px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.speed-hud-card {
+    position: relative;
+    background: var(--hud-dark);
+    padding: 9px 14px 10px;
+    clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    border-left: 2px solid var(--amber);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+}
+
+/* Faixa Automotiva Integrada de Ícones (Apagado = OFF / Aceso = ON) */
+.dashboard-telltales {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    align-items: center;
+    gap: 2px;
+    padding-bottom: 7px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.tt-lamp {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 18px;
+    color: rgba(255, 255, 255, 0.13);
+    transition: color 0.16s ease, filter 0.16s ease;
+}
+
+.tt-svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+
+.tt-lamp.lit-amber {
+    color: var(--amber-bright);
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.80));
+}
+
+.tt-lamp.lit-green {
+    color: var(--radar-green);
+    filter: drop-shadow(0 0 4px rgba(56, 255, 122, 0.80));
+}
+
+.tt-lamp.lit-red {
+    color: var(--led-red);
+    filter: drop-shadow(0 0 5px rgba(255, 74, 74, 0.85));
+}
+
+.tt-lamp.lit-cyan {
+    color: var(--led-cyan);
+    filter: drop-shadow(0 0 5px rgba(56, 232, 255, 0.85));
+}
+
+.tt-lamp.lit-blink-red {
+    color: var(--led-red);
+    animation: ttWarnBlink 0.9s ease-in-out infinite;
+}
+
+@keyframes ttWarnBlink {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 5px rgba(255, 74, 74, 0.9)); }
+    50%      { opacity: 0.25; filter: none; }
+}
+
+.speed-top-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+}
+
+.gear-block {
+    display: flex;
+    flex-direction: column;
+}
+
+.gear-caption {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: var(--txt-dim);
+}
+
+.gear-char {
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--amber);
+    text-shadow: 0 0 12px var(--amber-glow);
+}
+
+.speed-digits-block {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.speed-digits {
+    font-family: var(--font-mono);
+    font-size: 40px;
+    font-weight: 900;
+    line-height: 0.92;
+    letter-spacing: 1px;
+}
+
+.speed-digits .d-muted,
+.alt-digits .d-muted {
+    color: rgba(255, 255, 255, 0.14);
+}
+
+.speed-digits .d-lit {
+    color: #ffffff;
+}
+
+.speed-unit {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--txt-mid);
+}
+
+.alt-sub-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.alt-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--txt-dim);
+    margin-right: auto;
+}
+
+.vspeed-arrow {
+    font-size: 10px;
+    color: var(--txt-dim);
+}
+.vspeed-arrow.up { color: var(--led-green); }
+.vspeed-arrow.down { color: var(--amber); }
+
+.alt-digits {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+}
+.alt-digits .d-lit {
+    color: #dce3ee;
+}
+
+.alt-unit {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--txt-mid);
+}
+
+.rpm-segments {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 3px;
+    margin: 8px 0 7px;
+}
+
+.rpm-segments .seg {
+    height: 6px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    transition: background 0.1s ease;
+}
+
+.rpm-segments .seg.lit {
+    background: #eef2f7;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.35);
+}
+
+.rpm-segments .seg.lit-high {
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber-glow);
+}
+
+.hud-bottom-metrics {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.metric-item {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.metric-sep {
+    width: 1px;
+    height: 11px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.m-lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--txt-dim);
+}
+
+.m-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--txt-light);
+}
+
+.m-val .m-muted { color: rgba(255, 255, 255, 0.16); }
+.m-val .m-amber { color: var(--amber); }
+.m-val.amber { color: var(--amber); }
+
+.fuel-hud-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 11px;
+    background: var(--hud-dark);
+    clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+}
+
+.fuel-lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--txt-mid);
+}
+
+.fuel-track {
+    flex: 1;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.fuel-fill {
+    height: 100%;
+    background: var(--amber);
+    box-shadow: 0 0 6px var(--amber-glow);
+    transition: width 0.25s ease;
+}
+
+.fuel-fill.low {
+    background: var(--led-red);
+}
+
+.fuel-pct {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--amber);
+}
+
+/* ============================================================================
+   TABLET DO CONTROLADOR DE RADAR (ATC — MAPA COMPLETO DE SAN ANDREAS + PAN/ZOOM)
+   ============================================================================ */
+.atc-tablet-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9500;
+    background: rgba(4, 8, 12, 0.62);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.atc-tablet-bezel {
+    position: relative;
+    width: min(1060px, 95vw);
+    height: min(730px, 91vh);
+    background: linear-gradient(180deg, #161b23 0%, #0b0e14 100%);
+    border: 3px solid #2e3746;
+    border-radius: 18px;
+    padding: 15px 18px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.12),
+        0 26px 70px rgba(0, 0, 0, 0.88);
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+}
+
+.tablet-cam-dot {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #090b0f;
+    border: 1px solid #2e3744;
+}
+
+.atc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    background: #0c120f;
+    border: 1px solid rgba(56, 255, 122, 0.26);
+    border-radius: 9px;
+}
+
+.atc-title-block {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+}
+
+.atc-live-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--radar-green);
+    box-shadow: 0 0 10px var(--radar-green);
+    animation: atcPulseDot 1.6s ease-in-out infinite;
+}
+
+@keyframes atcPulseDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+.atc-main-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: var(--radar-green);
+}
+
+.atc-sub-station {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #9ec0aa;
+}
+
+.atc-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.atc-wx-pills {
+    display: flex;
+    gap: 5px;
+}
+
+.atc-wx-pill {
+    padding: 4px 7px;
+    background: rgba(15, 26, 19, 0.9);
+    border: 1px solid rgba(56, 255, 122, 0.16);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 800;
+    color: rgba(160, 190, 170, 0.35);
+}
+
+.atc-wx-pill.on-snow { color: #dff6ff; border-color: #7ad7ff; background: rgba(65, 165, 225, 0.22); }
+.atc-wx-pill.on-rain { color: #79d2ff; border-color: #4db8ff; background: rgba(30, 125, 215, 0.22); }
+.atc-wx-pill.on-fog  { color: #ffe29a; border-color: #f2be42; background: rgba(215, 165, 45, 0.2); }
+
+.btn-atc-sonar {
+    padding: 6px 10px;
+    background: rgba(15, 34, 21, 0.9);
+    border: 1px solid rgba(56, 255, 122, 0.35);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    color: #88a894;
+    cursor: pointer;
+}
+
+.btn-atc-sonar.sonar-on {
+    background: rgba(56, 255, 122, 0.16);
+    border-color: var(--radar-green);
+    color: var(--radar-green);
+    box-shadow: 0 0 8px rgba(56, 255, 122, 0.22);
+}
+
+.btn-close-atc {
+    padding: 6px 11px;
+    background: rgba(180, 38, 38, 0.22);
+    border: 1px solid rgba(255, 85, 85, 0.55);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 800;
+    color: #ff9d9d;
+    cursor: pointer;
+}
+
+.btn-close-atc:hover {
+    background: rgba(210, 45, 45, 0.4);
+    color: #fff;
+}
+
+.atc-content {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 295px;
+    gap: 13px;
+}
+
+.atc-radar-panel {
+    background: #061109;
+    border: 1px solid rgba(56, 255, 122, 0.22);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    min-height: 0;
+    gap: 8px;
+}
+
+.atc-radar-scope {
+    position: relative;
+    width: min(585px, 61vh);
+    height: min(585px, 61vh);
+    border-radius: 12px;
+    background: radial-gradient(circle, #071d0e 0%, #041208 65%, #020904 100%);
+    border: 2px solid #28e866;
+    box-shadow:
+        0 0 24px rgba(40, 232, 102, 0.22),
+        inset 0 0 36px rgba(40, 232, 102, 0.14);
+    overflow: hidden;
+    cursor: grab;
+}
+
+.atc-radar-scope.panning {
+    cursor: grabbing;
+}
+
+.atc-map-layer {
+    position: absolute;
+    left: 0%;
+    top: 0%;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.65;
+    will-change: left, top, width, height;
+}
+
+.atc-gtav-map-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: fill;
+    filter: drop-shadow(0 0 4px rgba(56, 255, 122, 0.25));
+}
+
+.atc-world-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, rgba(56, 255, 122, 0.09) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(56, 255, 122, 0.09) 1px, transparent 1px);
+    background-size: 10% 10%;
+}
+
+.atc-svg-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.atc-svg-overlay .atc-axis {
+    stroke: rgba(56, 255, 122, 0.22);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+
+.atc-svg-overlay .atc-ring {
+    fill: none;
+    stroke: rgba(56, 255, 122, 0.22);
+    stroke-width: 1;
+}
+
+.atc-svg-overlay .atc-ring-outer {
+    fill: none;
+    stroke: rgba(56, 255, 122, 0.35);
+    stroke-width: 1.3;
+}
+
+/* FEIXE HORÁRIO REAL NO TABLET ATC (ponteiro vivo na frente + rastro suave p/ trás) */
+.atc-sweep-beam {
+    position: absolute;
+    left: -25%;
+    top: -25%;
+    width: 150%;
+    height: 150%;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        transparent 292deg,
+        rgba(56, 255, 122, 0.02) 308deg,
+        rgba(56, 255, 122, 0.10) 334deg,
+        rgba(56, 255, 122, 0.26) 356deg,
+        rgba(92, 255, 148, 0.46) 360deg
+    );
+    animation: radarSweepClockwise 4.0s linear infinite;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.atc-cardinal {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 900;
+    color: var(--radar-green);
+    background: rgba(4, 15, 7, 0.85);
+    border: 1px solid rgba(56, 255, 122, 0.35);
+    padding: 1px 5px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 5;
+}
+.atc-cardinal.n { top: 6px; left: 50%; transform: translateX(-50%); }
+.atc-cardinal.s { bottom: 24px; left: 50%; transform: translateX(-50%); }
+.atc-cardinal.e { right: 6px; top: 50%; transform: translateY(-50%); }
+.atc-cardinal.w { left: 6px; top: 50%; transform: translateY(-50%); }
+
+.atc-pan-hint {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 8px;
+    background: rgba(3, 11, 6, 0.82);
+    border: 1px solid rgba(56, 255, 122, 0.22);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: #84b895;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.atc-contacts-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+
+.atc-tower-pin {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 3;
+}
+
+.atc-tower-dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--amber-bright);
+    border: 2px solid #09140c;
+    box-shadow: 0 0 10px var(--amber);
+}
+
+.atc-tower-lbl {
+    margin-top: 2px;
+    padding: 1px 4px;
+    background: rgba(12, 16, 12, 0.88);
+    border: 1px solid rgba(245, 158, 11, 0.65);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    font-weight: 800;
+    color: var(--amber-bright);
+    white-space: nowrap;
+}
+
+.atc-id-contact {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 5;
+}
+
+.atc-id-ico {
+    width: 20px;
+    height: 20px;
+    color: var(--radar-green);
+    filter: drop-shadow(0 0 6px rgba(56, 255, 122, 0.95));
+}
+
+.atc-id-ico svg {
+    width: 100%;
+    height: 100%;
+}
+
+.atc-id-tag {
+    margin-top: 2px;
+    padding: 1px 5px;
+    background: rgba(4, 18, 9, 0.88);
+    border: 1px solid rgba(56, 255, 122, 0.5);
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #caffdc;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.atc-unk-zone {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 52, 52, 0.30) 0%, rgba(255, 42, 42, 0.11) 70%, rgba(255, 42, 42, 0.03) 100%);
+    border: 2px dashed rgba(255, 78, 78, 0.92);
+    box-shadow: 0 0 16px rgba(255, 52, 52, 0.42);
+    animation: unkRedPulse 1.5s ease-in-out infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 6;
+}
+
+@keyframes unkRedPulse {
+    0%, 100% {
+        box-shadow: 0 0 12px rgba(255, 52, 52, 0.35);
+        border-color: rgba(255, 82, 82, 0.95);
+    }
+    50% {
+        box-shadow: 0 0 24px rgba(255, 52, 52, 0.72);
+        border-color: rgba(255, 150, 150, 1);
+    }
+}
+
+.atc-unk-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ff4b4b;
+    box-shadow: 0 0 8px #ff4b4b;
+}
+
+.atc-unk-label {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 2px 6px;
+    background: rgba(48, 8, 8, 0.92);
+    border: 1px solid #ff5c5c;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 900;
+    color: #ffb8b8;
+    white-space: nowrap;
+}
+
+.atc-zoom-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 5px 10px;
+    background: #0b160e;
+    border: 1px solid rgba(56, 255, 122, 0.22);
+    border-radius: 7px;
+}
+
+.atc-zoom-controls,
+.atc-quick-views,
+.atc-opacity-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.zoom-lbl {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #8eb59b;
+}
+
+.zoom-val {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 900;
+    color: var(--radar-green);
+    min-width: 118px;
+    text-align: center;
+}
+
+.zoom-btn {
+    width: 24px;
+    height: 22px;
+    background: #132619;
+    border: 1px solid rgba(56, 255, 122, 0.4);
+    border-radius: 4px;
+    color: var(--radar-green);
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.zoom-btn:hover {
+    background: rgba(56, 255, 122, 0.2);
+}
+
+.atc-view-btn {
+    padding: 4px 8px;
+    background: #122417;
+    border: 1px solid rgba(56, 255, 122, 0.35);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #bcefd0;
+    cursor: pointer;
+}
+
+.atc-view-btn:hover {
+    background: rgba(56, 255, 122, 0.2);
+    color: #fff;
+}
+
+.atc-opacity-slider {
+    width: 74px;
+    accent-color: #38ff7a;
+    cursor: pointer;
+}
+
+.atc-sidebar {
+    background: #0a120d;
+    border: 1px solid rgba(56, 255, 122, 0.2);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.atc-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+}
+
+.atc-stat-card {
+    padding: 8px 6px;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.atc-stat-card.green {
+    background: rgba(56, 255, 122, 0.1);
+    border: 1px solid rgba(56, 255, 122, 0.35);
+}
+
+.atc-stat-card.red {
+    background: rgba(255, 65, 65, 0.12);
+    border: 1px solid rgba(255, 78, 78, 0.45);
+}
+
+.stat-num {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 900;
+}
+
+.atc-stat-card.green .stat-num { color: var(--radar-green); }
+.atc-stat-card.red .stat-num   { color: #ff6262; }
+
+.stat-lbl {
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 800;
+    color: #a8bdb0;
+}
+
+.atc-rule-banner {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: #96ab9e;
+}
+
+.atc-rule-banner strong {
+    color: var(--amber-bright);
+}
+
+.atc-list-header {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    color: #7ea38b;
+    padding-top: 2px;
+}
+
+.atc-contacts-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-right: 3px;
+}
+
+.atc-contacts-list::-webkit-scrollbar {
+    width: 4px;
+}
+.atc-contacts-list::-webkit-scrollbar-thumb {
+    background: rgba(56, 255, 122, 0.25);
+    border-radius: 4px;
+}
+
+.atc-contact-card {
+    padding: 7px 9px;
+    border-radius: 6px;
+    background: rgba(15, 32, 20, 0.8);
+    border-left: 3px solid var(--radar-green);
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: background 0.14s ease, transform 0.1s ease;
+}
+
+.atc-contact-card:hover {
+    background: rgba(28, 58, 36, 0.95);
+}
+
+.atc-contact-card.unk {
+    background: rgba(45, 12, 12, 0.82);
+    border-left-color: #ff5555;
+}
+
+.atc-contact-card.unk:hover {
+    background: rgba(68, 18, 18, 0.95);
+}
+
+.card-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    font-weight: 900;
+    color: #e6fff0;
+    margin-bottom: 3px;
+}
+
+.atc-contact-card.unk .card-top {
+    color: #ffb3b3;
+}
+
+.card-sub {
+    font-size: 9px;
+    color: #9ec0aa;
+}
+
+.atc-contact-card.unk .card-sub {
+    color: #e59898;
+}
+
+.atc-empty-msg {
+    margin: auto 0;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: #5b7865;
+}

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aero Pilot — Cockpit, Painel Luminoso & Controlador ATC</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <!-- Barra exclusiva de simulação quando aberto fora do FiveM (Preview no navegador) -->
+    <div id="browser-sim-bar" class="browser-sim-bar hidden">
+        <span class="sim-title">PREVIEW INTERATIVO</span>
+        <button id="sim-btn-plane" class="sim-btn active">✈ Avião</button>
+        <button id="sim-btn-heli" class="sim-btn">🚁 Helicóptero</button>
+        <button id="sim-btn-air" class="sim-btn">🛫 Em Voo</button>
+        <button id="sim-btn-flight-cmd" class="sim-btn" title="Simular comando real de pilotagem (W/S/A/D)">🕹 Comando Voo</button>
+        <button id="sim-btn-quick" class="sim-btn">⚡ Partida Rápida</button>
+        <button id="sim-btn-reset" class="sim-btn">↺ Cold & Dark</button>
+        <span class="sim-sep">|</span>
+        <button id="sim-btn-atc-tablet" class="sim-btn atc-highlight">📟 Tablet Controlador (Mapa Completo)</button>
+        <span class="sim-sep">|</span>
+        <button id="sim-wx-rain" class="sim-btn">🌧</button>
+        <button id="sim-wx-snow" class="sim-btn">❄</button>
+        <button id="sim-wx-fog" class="sim-btn">🌫</button>
+    </div>
+
+    <div id="aero-hud" class="aero-hud hidden">
+        <!-- ================================================================
+             CANTO INFERIOR ESQUERDO: RADAR DE VARREDURA DE BORDO (MOVÍVEL + ESCALÁVEL)
+             ================================================================ -->
+        <div id="radar-module" class="radar-module customizable-widget">
+            <div class="edit-drag-badge">✥ ARRASTE • CLIQUE+SCROLL = TAMANHO</div>
+
+            <div class="radar-wx-strip">
+                <div id="wx-sig-snow" class="wx-sig" title="Sinal de Neve / Gelo">
+                    <span class="wx-icon">❄</span>
+                    <span class="wx-name">NEVE</span>
+                </div>
+                <div id="wx-sig-rain" class="wx-sig" title="Sinal de Chuva / Precipitação">
+                    <span class="wx-icon">🌧</span>
+                    <span class="wx-name">CHUVA</span>
+                </div>
+                <div id="wx-sig-fog" class="wx-sig" title="Sinal de Neblina / Baixa Visibilidade">
+                    <span class="wx-icon">🌫</span>
+                    <span class="wx-name">NEBLINA</span>
+                </div>
+            </div>
+
+            <div id="radar-scope" class="radar-scope">
+                <svg class="radar-svg-grid" viewBox="0 0 220 220">
+                    <defs>
+                        <clipPath id="radarCircleClip">
+                            <circle cx="110" cy="110" r="103" />
+                        </clipPath>
+                    </defs>
+                    <g clip-path="url(#radarCircleClip)" class="grid-lines">
+                        <line x1="22" y1="0" x2="22" y2="220" />
+                        <line x1="44" y1="0" x2="44" y2="220" />
+                        <line x1="66" y1="0" x2="66" y2="220" />
+                        <line x1="88" y1="0" x2="88" y2="220" />
+                        <line x1="132" y1="0" x2="132" y2="220" />
+                        <line x1="154" y1="0" x2="154" y2="220" />
+                        <line x1="176" y1="0" x2="176" y2="220" />
+                        <line x1="198" y1="0" x2="198" y2="220" />
+
+                        <line x1="0" y1="22" x2="220" y2="22" />
+                        <line x1="0" y1="44" x2="220" y2="44" />
+                        <line x1="0" y1="66" x2="220" y2="66" />
+                        <line x1="0" y1="88" x2="220" y2="88" />
+                        <line x1="0" y1="132" x2="220" y2="132" />
+                        <line x1="0" y1="154" x2="220" y2="154" />
+                        <line x1="0" y1="176" x2="220" y2="176" />
+                        <line x1="0" y1="198" x2="220" y2="198" />
+                    </g>
+
+                    <line x1="110" y1="6" x2="110" y2="214" class="radar-axis" />
+                    <line x1="6" y1="110" x2="214" y2="110" class="radar-axis" />
+
+                    <circle cx="110" cy="110" r="25" class="radar-ring" />
+                    <circle cx="110" cy="110" r="51" class="radar-ring" />
+                    <circle cx="110" cy="110" r="77" class="radar-ring" />
+                    <circle cx="110" cy="110" r="103" class="radar-ring-outer" />
+                </svg>
+
+                <div id="radar-wx-overlay" class="radar-wx-overlay"></div>
+
+                <!-- Feixe em sentido horário real: ponteiro vivo na frente + rastro suave para trás -->
+                <div class="radar-sweep-beam">
+                    <span class="sweep-needle"></span>
+                </div>
+
+                <div id="radar-north-ring" class="radar-north-ring">
+                    <span class="north-tag">N</span>
+                </div>
+
+                <div id="radar-targets-layer" class="radar-targets-layer"></div>
+
+                <div class="radar-self-marker" title="Sua Aeronave">
+                    <svg viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12 2L14 9L21 12L14 14L14 19L17 21V22L12 20.5L7 22V21L10 19L10 14L3 12L10 9L12 2Z"/>
+                    </svg>
+                </div>
+
+                <div id="radar-standby" class="radar-standby hidden">
+                    <span id="radar-standby-title" class="standby-title">RADAR OFF</span>
+                    <span id="radar-standby-sub" class="standby-sub">LIGUE NO COCKPIT</span>
+                </div>
+            </div>
+
+            <div class="radar-footer">
+                <div class="radar-traffic-counts">
+                    <span class="trf-cnt" id="radar-cnt-planes" title="Aviões com Radar Ligado">✈ <b id="val-cnt-planes">0</b></span>
+                    <span class="trf-cnt" id="radar-cnt-helis" title="Helicópteros com Radar Ligado">🚁 <b id="val-cnt-helis">0</b></span>
+                </div>
+                <span class="radar-range-lbl" id="radar-range-lbl">ALC 2.2 KM</span>
+            </div>
+        </div>
+
+        <!-- ================================================================
+             PAINEL DO COCKPIT ESCURO TRANSLÚCIDO + ÂMBAR LIMPO (v1/v2 RESTAURADO)
+             ================================================================ -->
+        <button id="collapsed-pill" class="collapsed-pill hidden" title="Abrir Painel do Cockpit">
+            <span class="pill-led" id="pill-status-dot"></span>
+            <span class="pill-label">COCKPIT</span>
+            <kbd id="lbl-key-panel-mini">F6</kbd>
+        </button>
+
+        <aside id="cockpit-panel" class="cockpit-panel">
+            <header class="panel-header">
+                <div class="panel-title-wrap">
+                    <span class="panel-hex-badge" id="panel-acft-badge">AVIÃO</span>
+                    <div class="panel-title-stack">
+                        <span class="panel-sub-title">COCKPIT • SISTEMAS</span>
+                    </div>
+                </div>
+                <div class="panel-header-actions">
+                    <button id="btn-reset-hud-pos" class="btn-icon-Reset" title="Restaurar posição e tamanho padrão do Radar e HUD">↺ HUD</button>
+                    <span class="key-hint" title="Ativar/Desativar Mouse">🖱 <kbd id="lbl-key-cursor">F7</kbd></span>
+                    <button id="btn-collapse-panel" class="btn-icon-close" title="Recolher Painel">─</button>
+                </div>
+            </header>
+
+            <div class="cockpit-body">
+                <!-- PRÉ-PARTIDA -->
+                <section id="grp-preflight" class="switch-group">
+                    <div class="group-plate">
+                        <span class="plate-title">PRÉ-PARTIDA</span>
+                        <span class="plate-led" id="led-grp-1"></span>
+                    </div>
+                    <div class="switch-grid cols-3">
+                        <button class="cockpit-sw" id="sw-doors" data-check="toggle_doors">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">PORTAS</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-doors">ABERTA</span>
+                        </button>
+                        <button class="cockpit-sw" id="sw-chocks" data-check="toggle_chocks">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">CALÇOS</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-chocks">PRESOS</span>
+                        </button>
+                        <button class="cockpit-sw guarded" id="sw-fuel-valve" data-check="toggle_fuel_valve">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">VÁLV. COMB</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator red-guard"></span>
+                            <span class="sw-state" id="val-fuel-valve">FECH.</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- SISTEMA ELÉTRICO & RADAR -->
+                <section id="grp-electrical" class="switch-group">
+                    <div class="group-plate">
+                        <span class="plate-title">ELÉTRICA &amp; RADAR</span>
+                        <span class="plate-led" id="led-grp-2"></span>
+                    </div>
+                    <div class="switch-grid cols-3">
+                        <button class="cockpit-sw master-red" id="sw-battery" data-check="toggle_battery">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">BATERIA</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator red-rocker"></span>
+                            <span class="sw-state" id="val-battery">0.0V</span>
+                        </button>
+                        <button class="cockpit-sw" id="sw-beacon" data-check="toggle_beacon">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">BEACON</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-beacon">OFF</span>
+                        </button>
+                        <button class="cockpit-sw radar-green-sw" id="sw-radar" data-check="toggle_radar" title="Liga/Desliga o Radar e Transponder da Aeronave">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">RADAR <small>[<span id="lbl-key-radar">I</span>]</small></span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-radar">OFF</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- CONTROLES DE COMBUSTÍVEL & SOLO -->
+                <section id="grp-controls" class="switch-group">
+                    <div class="group-plate">
+                        <span class="plate-title">CONTROLES DE SOLO &amp; MOTOR</span>
+                        <span class="plate-led" id="led-grp-3"></span>
+                    </div>
+                    <div class="switch-grid cols-3">
+                        <button class="cockpit-lever" id="sw-mixture" data-check="cycle_mixture">
+                            <span class="sw-name">MISTURA</span>
+                            <div class="lever-slot">
+                                <span class="lever-knob mix-red" id="knob-mixture"></span>
+                            </div>
+                            <span class="sw-state" id="val-mixture">CORTADA</span>
+                        </button>
+                        <button class="cockpit-lever" id="sw-throttle" data-check="toggle_throttle_crack">
+                            <span class="sw-name">MANETE</span>
+                            <div class="lever-slot">
+                                <span class="lever-knob thr-dark" id="knob-throttle"></span>
+                            </div>
+                            <span class="sw-state" id="val-throttle">0% IDLE</span>
+                        </button>
+                        <button class="cockpit-sw" id="sw-pbrake" data-check="toggle_parking_brake">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">FREIO <small>[<span id="lbl-key-brake">B</span>]</small></span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-pbrake">SOLTO</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- IGNIÇÃO & MAGNETOS -->
+                <section id="grp-ignition" class="switch-group">
+                    <div class="group-plate">
+                        <span class="plate-title">IGNIÇÃO / MAGNETOS</span>
+                        <span class="plate-led" id="led-grp-4"></span>
+                    </div>
+                    <div class="ignition-housing">
+                        <div class="key-cylinder" id="ignition-cylinder" title="Clique para girar a chave">
+                            <div class="key-slot-rotor" id="ignition-key-rotor">
+                                <span class="key-blade"></span>
+                            </div>
+                        </div>
+                        <div class="mag-selector">
+                            <button class="mag-btn active" data-mag="OFF">OFF</button>
+                            <button class="mag-btn" data-mag="L">L</button>
+                            <button class="mag-btn" data-mag="R">R</button>
+                            <button class="mag-btn" data-mag="BOTH">BOTH</button>
+                            <button class="mag-btn mag-start" data-mag="START" id="btn-mag-start">START</button>
+                        </div>
+                    </div>
+                    <div id="crank-bar-wrap" class="crank-bar-wrap hidden">
+                        <div class="crank-bar-head">
+                            <span>PARTIDA EM CURSO...</span>
+                            <span id="crank-pct">0%</span>
+                        </div>
+                        <div class="crank-track">
+                            <div id="crank-fill" class="crank-fill"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ESTABILIZAÇÃO & ALTERNADOR -->
+                <section id="grp-stabilization" class="switch-group">
+                    <div class="group-plate">
+                        <span class="plate-title">ESTABILIZAÇÃO &amp; ALTERNADOR</span>
+                        <span class="plate-led" id="led-grp-5"></span>
+                    </div>
+                    <div class="stab-row">
+                        <div class="mini-gauges">
+                            <div class="mini-inst">
+                                <span class="inst-lbl">RPM</span>
+                                <span class="inst-val" id="inst-stab-state">OFF</span>
+                            </div>
+                            <div class="mini-inst">
+                                <span class="inst-lbl">ÓLEO PSI</span>
+                                <span class="inst-val" id="inst-oil-psi">0</span>
+                            </div>
+                            <div class="mini-inst">
+                                <span class="inst-lbl">TEMP</span>
+                                <span class="inst-val" id="inst-oil-temp">24°</span>
+                            </div>
+                        </div>
+                        <button class="cockpit-sw alt-switch" id="sw-alternator" data-check="toggle_alternator">
+                            <div class="sw-top-bar">
+                                <span class="sw-name">ALT GEN</span>
+                                <span class="sw-led"></span>
+                            </div>
+                            <span class="sw-actuator"></span>
+                            <span class="sw-state" id="val-alternator">OFF</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- ASSISTÊNCIA DE VOO: SOMENTE AVIÕES -->
+                <section id="module-plane-ap" class="switch-group avionics-box">
+                    <div class="group-plate">
+                        <span class="plate-title">PILOTO AUTOMÁTICO DE ROTA</span>
+                        <kbd id="lbl-key-ap">J</kbd>
+                    </div>
+                    <div class="ap-lcd-row">
+                        <span id="ap-wp-status" class="ap-lcd-chip">SEM WAYPOINT</span>
+                        <span id="ap-alt-gate" class="ap-lcd-chip">SUBA &gt; 262 FT</span>
+                    </div>
+                    <div class="ap-knobs-row">
+                        <div class="ap-Bug">
+                            <span class="bug-lbl">ALT CRUZEIRO</span>
+                            <div class="bug-stepper">
+                                <button data-assist="alt_down">−</button>
+                                <span id="ap-cruise-alt">1250 FT</span>
+                                <button data-assist="alt_up">+</button>
+                            </div>
+                        </div>
+                        <div class="ap-Bug">
+                            <span class="bug-lbl">VELOCIDADE</span>
+                            <div class="bug-stepper">
+                                <button data-assist="spd_down">−</button>
+                                <span id="ap-cruise-spd">140 KTS</span>
+                                <button data-assist="spd_up">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="btn-toggle-plane-ap" class="avionics-engage-btn" data-assist="toggle_plane_ap">
+                        <span class="engage-led"></span>
+                        <span id="lbl-plane-ap-btn">ATIVAR PILOTO AUTOMÁTICO</span>
+                    </button>
+                </section>
+
+                <!-- ASSISTÊNCIA DE VOO: SOMENTE HELICÓPTEROS -->
+                <section id="module-heli-stab" class="switch-group avionics-box hidden">
+                    <div class="group-plate">
+                        <span class="plate-title">ESTABILIZADOR DE ALTITUDE</span>
+                        <kbd id="lbl-key-stab">K</kbd>
+                    </div>
+                    <div class="ap-lcd-row">
+                        <span class="ap-lcd-chip">MODO HOVER</span>
+                        <span id="heli-alt-gate" class="ap-lcd-chip">DECOLE PRIMEIRO</span>
+                    </div>
+                    <div class="ap-knobs-row single">
+                        <div class="ap-Bug">
+                            <span class="bug-lbl">ALTITUDE MANTIDA</span>
+                            <div class="bug-stepper">
+                                <button data-assist="alt_down">−</button>
+                                <span id="heli-locked-alt">0 FT</span>
+                                <button data-assist="alt_up">+</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="btn-toggle-heli-stab" class="avionics-engage-btn" data-assist="toggle_heli_stab">
+                        <span class="engage-led"></span>
+                        <span id="lbl-heli-stab-btn">ESTABILIZAR ALTITUDE</span>
+                    </button>
+                </section>
+            </div>
+
+            <footer class="panel-footer">
+                <span>PAINEL <kbd id="lbl-key-panel">F6</kbd></span>
+                <span>ARRASTE HUD • CLIQUE+SCROLL ESCALA</span>
+            </footer>
+        </aside>
+
+        <!-- ================================================================
+             CANTO INFERIOR DIREITO: HUD DE VELOCIDADE + ÍCONES ESTILO PAINEL DE CARRO
+             ================================================================ -->
+        <div id="telemetry-cluster" class="telemetry-cluster customizable-widget">
+            <div class="edit-drag-badge">✥ ARRASTE • CLIQUE+SCROLL = TAMANHO</div>
+
+            <div class="speed-hud-card">
+                <!-- Luzes Espia Estilo Painel de Carro Integradas no Topo da HUD de Velocidade -->
+                <div class="dashboard-telltales">
+                    <div id="tt-bat" class="tt-lamp" title="Bateria Master">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <rect x="2" y="7" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <line x1="6" y1="4" x2="6" y2="7" stroke="currentColor" stroke-width="2.2"/>
+                            <line x1="18" y1="4" x2="18" y2="7" stroke="currentColor" stroke-width="2.2"/>
+                            <line x1="5.5" y1="13" x2="9.5" y2="13" stroke="currentColor" stroke-width="2"/>
+                            <line x1="16.5" y1="11" x2="16.5" y2="15" stroke="currentColor" stroke-width="2"/>
+                            <line x1="14.5" y1="13" x2="18.5" y2="13" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-alt" class="tt-lamp" title="Alternador / Carga">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <polygon points="13 2 4 14 11 14 10 22 20 10 13 10 13 2" fill="currentColor"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-bcn" class="tt-lamp" title="Luz Anti-Colisão (Beacon)">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <path d="M8 18h8l-1-7a3 3 0 0 0-6 0l-1 7z" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <line x1="6" y1="20" x2="18" y2="20" stroke="currentColor" stroke-width="2.2"/>
+                            <line x1="12" y1="3" x2="12" y2="6" stroke="currentColor" stroke-width="2"/>
+                            <line x1="4" y1="9" x2="6.5" y2="10.5" stroke="currentColor" stroke-width="2"/>
+                            <line x1="20" y1="9" x2="17.5" y2="10.5" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-xpdr" class="tt-lamp" title="Radar / Transponder">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <circle cx="12" cy="18" r="2.2" fill="currentColor"/>
+                            <path d="M7.5 14.5a6.5 6.5 0 0 1 9 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M4 11a11.3 11.3 0 0 1 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M1.5 7.5a16 16 0 0 1 21 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-brk" class="tt-lamp" title="Freio de Estacionamento (P)">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <circle cx="12" cy="12" r="7.2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <path d="M4.2 6.8a10.5 10.5 0 0 0 0 10.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M19.8 6.8a10.5 10.5 0 0 1 0 10.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <text x="12" y="15.3" text-anchor="middle" font-size="9.5" font-weight="900" fill="currentColor" font-family="sans-serif">P</text>
+                        </svg>
+                    </div>
+
+                    <div id="tt-door" class="tt-lamp" title="Portas Trancadas">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <rect x="6" y="11" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <path d="M8.5 11V7.5a3.5 3.5 0 0 1 7 0V11" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="12" cy="16" r="1.5" fill="currentColor"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-chck" class="tt-lamp" title="Calços Removidos">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <circle cx="11" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="11" cy="12" r="2" fill="currentColor"/>
+                            <polyline points="15.5 16.5 18 19 22 14.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-fuel" class="tt-lamp" title="Válvula de Combustível">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <path d="M12 3C12 3 6 10.2 6 14.5a6 6 0 0 0 12 0C18 10.2 12 3 12 3z" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <path d="M9.5 15a2.5 2.5 0 0 0 2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-gear" class="tt-lamp" title="Trem de Pouso">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <line x1="6" y1="4" x2="18" y2="4" stroke="currentColor" stroke-width="2.2"/>
+                            <line x1="12" y1="4" x2="12" y2="12" stroke="currentColor" stroke-width="2.2"/>
+                            <circle cx="12" cy="16.5" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/>
+                        </svg>
+                    </div>
+
+                    <div id="tt-auto" class="tt-lamp" title="Piloto Automático / Estabilizador">
+                        <svg viewBox="0 0 24 24" class="tt-svg">
+                            <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/>
+                            <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+                            <line x1="3.8" y1="12" x2="9.5" y2="12" stroke="currentColor" stroke-width="2"/>
+                            <line x1="14.5" y1="12" x2="20.2" y2="12" stroke="currentColor" stroke-width="2"/>
+                            <line x1="12" y1="14.5" x2="12" y2="20.2" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span id="tt-auto-code" class="hidden">AP</span>
+                    </div>
+                </div>
+
+                <div class="speed-top-row">
+                    <div class="gear-block">
+                        <span class="gear-caption">MODO</span>
+                        <span id="hud-stage-code" class="gear-char">OFF</span>
+                    </div>
+
+                    <div class="speed-digits-block">
+                        <div id="hud-speed-digits" class="speed-digits">
+                            <span class="d-muted">000</span>
+                        </div>
+                        <span id="hud-speed-unit" class="speed-unit">KTS</span>
+                    </div>
+                </div>
+
+                <div class="alt-sub-row">
+                    <span class="alt-tag">ALT</span>
+                    <span id="hud-vspeed-arrow" class="vspeed-arrow">─</span>
+                    <span id="hud-alt-digits" class="alt-digits">
+                        <span class="d-muted">00000</span>
+                    </span>
+                    <span id="hud-alt-unit" class="alt-unit">FT</span>
+                </div>
+
+                <div id="hud-rpm-bar" class="rpm-segments">
+                    <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
+                    <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
+                    <span class="seg"></span><span class="seg"></span><span class="seg"></span><span class="seg"></span>
+                </div>
+
+                <div class="hud-bottom-metrics">
+                    <div class="metric-item">
+                        <span class="m-lbl">RPM</span>
+                        <span id="hud-rpm-digits" class="m-val">0000</span>
+                    </div>
+                    <div class="metric-sep"></div>
+                    <div class="metric-item">
+                        <span id="hud-volts" class="m-val amber">0.0V</span>
+                        <span id="hud-bat-pct" class="m-lbl">BAT 100%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra Inferior de Combustível -->
+            <div class="fuel-hud-bar">
+                <span class="fuel-lbl">FUEL</span>
+                <div class="fuel-track">
+                    <div id="hud-fuel-fill" class="fuel-fill" style="width: 100%"></div>
+                </div>
+                <span id="hud-fuel-pct" class="fuel-pct">100%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====================================================================
+         TABLET DO CONTROLADOR DE RADAR (ATC — MAPA COMPLETO TRANSPARENTE + SONAR)
+         ==================================================================== -->
+    <div id="atc-tablet-overlay" class="atc-tablet-overlay hidden">
+        <div class="atc-tablet-bezel">
+            <span class="tablet-cam-dot"></span>
+
+            <header class="atc-header">
+                <div class="atc-title-block">
+                    <span class="atc-live-dot"></span>
+                    <div>
+                        <div class="atc-main-title">SISTEMA DE CONTROLE DE TRÁFEGO AÉREO — SAN ANDREAS</div>
+                        <div id="atc-station-name" class="atc-sub-station">TORRE DE CONTROLE — FORT ZANCUDO</div>
+                    </div>
+                </div>
+
+                <div class="atc-header-right">
+                    <div class="atc-wx-pills">
+                        <span id="atc-wx-snow" class="atc-wx-pill">❄ NEVE</span>
+                        <span id="atc-wx-rain" class="atc-wx-pill">🌧 CHUVA</span>
+                        <span id="atc-wx-fog" class="atc-wx-pill">🌫 NEBLINA</span>
+                    </div>
+                    <button id="btn-atc-sonar" class="btn-atc-sonar sonar-on" title="Ativar/Desativar Som Nativo de Sonar (Submarino Kosatka)">
+                        🔊 SONAR: ON
+                    </button>
+                    <button id="btn-close-atc" class="btn-close-atc" title="Fechar Controlador [ESC]">✕ FECHAR [ESC]</button>
+                </div>
+            </header>
+
+            <div class="atc-content">
+                <!-- Coluna Esquerda: Tela do Radar com Mapa Completo de San Andreas -->
+                <div class="atc-radar-panel">
+                    <div id="atc-radar-scope" class="atc-radar-scope">
+                        <div id="atc-map-layer" class="atc-map-layer">
+                            <img src="gtav_radar_map.webp" alt="San Andreas Radar Map" class="atc-gtav-map-img" draggable="false" />
+                            <div class="atc-world-grid"></div>
+                        </div>
+
+                        <svg class="atc-svg-overlay" viewBox="0 0 600 600">
+                            <line x1="300" y1="0" x2="300" y2="600" class="atc-axis" />
+                            <line x1="0" y1="300" x2="600" y2="300" class="atc-axis" />
+                            <circle cx="300" cy="300" r="95" class="atc-ring" />
+                            <circle cx="300" cy="300" r="190" class="atc-ring" />
+                            <circle cx="300" cy="300" r="285" class="atc-ring-outer" />
+                        </svg>
+
+                        <!-- Feixe em sentido horário real: ponteiro vivo na frente + rastro p/ trás -->
+                        <div class="atc-sweep-beam">
+                            <span class="sweep-needle"></span>
+                        </div>
+
+                        <span class="atc-cardinal n">N</span>
+                        <span class="atc-cardinal e">E</span>
+                        <span class="atc-cardinal s">S</span>
+                        <span class="atc-cardinal w">W</span>
+
+                        <div id="atc-contacts-layer" class="atc-contacts-layer"></div>
+
+                        <div class="atc-pan-hint">ARRASTE P/ PERCORRER O MAPA • SCROLL P/ ZOOM</div>
+                    </div>
+
+                    <div class="atc-zoom-bar">
+                        <div class="atc-zoom-controls">
+                            <span class="zoom-lbl">ZOOM:</span>
+                            <button id="atc-zoom-out" class="zoom-btn" title="Afastar Zoom">−</button>
+                            <span id="atc-zoom-val" class="zoom-val">1.0x (MAPA INTEIRO)</span>
+                            <button id="atc-zoom-in" class="zoom-btn" title="Aproximar Zoom">+</button>
+                        </div>
+
+                        <div class="atc-quick-views">
+                            <button id="atc-btn-fullmap" class="atc-view-btn" title="Ver Mapa Completo de San Andreas">🗺 MAPA INTEIRO</button>
+                            <button id="atc-btn-tower" class="atc-view-btn" title="Centralizar na Torre de Controle">🗼 TORRE</button>
+                        </div>
+
+                        <div class="atc-opacity-box" title="Ajustar transparência do mapa do jogo no radar">
+                            <span class="zoom-lbl">MAPA:</span>
+                            <input id="atc-map-opacity" type="range" min="15" max="95" value="65" class="atc-opacity-slider" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Coluna Direita: Lista de Contatos no Espaço Aéreo -->
+                <aside class="atc-sidebar">
+                    <div class="atc-stats-grid">
+                        <div class="atc-stat-card green">
+                            <span class="stat-num" id="atc-cnt-id">0</span>
+                            <span class="stat-lbl">IDENTIFICADAS</span>
+                        </div>
+                        <div class="atc-stat-card red">
+                            <span class="stat-num" id="atc-cnt-unk">0</span>
+                            <span class="stat-lbl">NÃO IDENTIF.</span>
+                        </div>
+                    </div>
+
+                    <div class="atc-rule-banner">
+                        <span>PISO DETECÇÃO S/ RADAR:</span>
+                        <strong id="atc-floor-val">&gt; 394 FT</strong>
+                    </div>
+
+                    <div class="atc-list-header">TRÁFEGO EM SAN ANDREAS (CLIQUE P/ FOCAR)</div>
+                    <div id="atc-contacts-list" class="atc-contacts-list">
+                        <div class="atc-empty-msg">Nenhuma aeronave detectada no espaço aéreo.</div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
