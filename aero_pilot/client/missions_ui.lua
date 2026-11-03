@@ -84,8 +84,8 @@ end)
 -- ---------------------------------------------------------------------------
 local function playAlertSound()
     local snd = Config.Missions and Config.Missions.Alerts and Config.Missions.Alerts.Sound or {}
-    local name = snd.Name or 'Beep_Red'
-    local set = snd.Set or 'DLC_HEIST_HACKING_SNAKE_SOUNDS'
+    local name = snd.Name or 'ERROR'
+    local set = snd.Set or 'HUD_FRONTEND_DEFAULT_SOUNDSET'
     local ok = pcall(function()
         PlaySoundFrontend(-1, name, set, true)
     end)

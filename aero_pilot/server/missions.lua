@@ -515,7 +515,7 @@ local function buildOrder()
             weaponsAllowed = m.weaponsAllowed, visualContact = m.visualContact,
             lastKnown = m.target.lastKnown, searchCenter = m.searchCenter,
             searchEndsAt = m.searchEndsAt, jets = m.jets,
-            phase = m.aiPhase or m.state,
+            phase = m.state,
         }
     end
     return order

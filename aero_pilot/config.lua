@@ -480,11 +480,13 @@ Config.Missions = {
         },
         Color      = { r = 255, g = 214, b = 51 },
         BlinkMs    = 650,
+        -- Som NATIVO do GTA V. O default usa o soundset mais confiável do jogo;
+        -- troque por 'Beep_Red' / 'DLC_HEIST_HACKING_SNAKE_SOUNDS' se preferir.
         Sound      = {
-            Name          = 'Beep_Red',
-            Set           = 'DLC_HEIST_HACKING_SNAKE_SOUNDS',
-            FallbackName  = 'ERROR',
-            FallbackSet   = 'HUD_FRONTEND_DEFAULT_SOUNDSET',
+            Name          = 'ERROR',
+            Set           = 'HUD_FRONTEND_DEFAULT_SOUNDSET',
+            FallbackName  = 'Beep_Red',
+            FallbackSet   = 'DLC_HEIST_HACKING_SNAKE_SOUNDS',
             Repeat        = true,
         },
     },
