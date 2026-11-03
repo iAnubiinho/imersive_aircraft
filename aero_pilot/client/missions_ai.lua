@@ -286,6 +286,9 @@ end
 -- ---------------------------------------------------------------------------
 local function syncJets()
     local descs = (order and order.jets) or {}
+    local streamingGrace = (order and order.streamingGraceMs)
+        or (Config.Missions and Config.Missions.Intervals and Config.Missions.Intervals.StreamingGraceMs)
+        or 8000
     local seen = {}
     for i = 1, #descs do
         local d = descs[i]
@@ -296,8 +299,11 @@ local function syncJets()
             if not j then
                 j = {
                     slot = slot, phase = 'STORED', alive = false,
-                    taxiIndex = 1, approachIndex = 1, lastGoal = nil,
-                    lastTaskKey = nil, pilotReady = false,
+                    taxiIndex = 1, approachIndex = 1,
+                    lastGoal = nil, lastTaskKey = nil, pilotReady = false,
+                    firstSeenAt = nowMs(), streamedOnce = false,
+                    streamedAt = nil, lastSeenAt = nil,
+                    waitingForEntity = true, destroyedSent = false,
                 }
                 jets[slot] = j
             end
@@ -309,29 +315,55 @@ local function syncJets()
                 j.approachIndex = 1
                 j.phase = (d.phase == 'REUSED_IN_AIR') and 'TRANSIT' or 'STORED'
                 j.destroyedSent = false
+                j.streamedOnce = false
+                j.streamedAt = nil
+                j.lastSeenAt = nil
             end
             j.netId = d.netId
             j.pedNetId = d.pedNetId
             j.callsign = d.callsign
 
-            j.veh = resolveEntity(d.netId, true)
-            j.ped = resolveEntity(d.pedNetId, false)
-            if j.veh == 0 then
+            -- netId ainda pendente no servidor: NUNCA interpretar como destruição.
+            if d.pending or not d.netId or d.netId <= 0 then
+                j.veh = 0
+                j.ped = 0
                 j.alive = false
-                if not j.destroyedSent then
-                    j.destroyedSent = true
-                    postEvent({ type = 'JET_DESTROYED', slot = slot })
-                end
+                j.waitingForEntity = true
             else
-                local health = GetEntityHealth(j.veh) or 1000
-                j.alive = (health > 0) and not IsEntityDead(j.veh)
-                if not j.alive and not j.destroyedSent then
-                    j.destroyedSent = true
-                    postEvent({ type = 'JET_DESTROYED', slot = slot })
+                j.veh = resolveEntity(d.netId, true)
+                j.ped = resolveEntity(d.pedNetId, false)
+                if j.veh == 0 then
+                    j.alive = false
+                    j.waitingForEntity = true
+                    -- Só reporta destruição se já viu a entidade viva E o desaparecimento
+                    -- persistir além da janela de streaming do OneSync.
+                    local lastSeen = j.lastSeenAt or j.streamedAt or j.firstSeenAt or nowMs()
+                    if j.streamedOnce and not j.destroyedSent
+                        and (nowMs() - lastSeen) >= streamingGrace then
+                        j.destroyedSent = true
+                        postEvent({ type = 'JET_DESTROYED', slot = slot })
+                    end
+                else
+                    j.waitingForEntity = false
+                    if not j.streamedOnce then
+                        j.streamedOnce = true
+                        j.streamedAt = nowMs()
+                    end
+                    j.lastSeenAt = nowMs()
+                    local health = GetEntityHealth(j.veh) or 1000
+                    j.alive = (health > 0) and not IsEntityDead(j.veh)
+                    if not j.alive then
+                        -- Health 0 pode ser transitório logo após o spawn.
+                        if not j.destroyedSent and (nowMs() - (j.streamedAt or nowMs())) >= 1500 then
+                            j.destroyedSent = true
+                            postEvent({ type = 'JET_DESTROYED', slot = slot })
+                        end
+                    else
+                        ensureControl(j.veh)
+                        if j.ped ~= 0 then ensureControl(j.ped) end
+                        if j.ped ~= 0 then setupPilot(j) end
+                    end
                 end
-                ensureControl(j.veh)
-                if j.ped ~= 0 then ensureControl(j.ped) end
-                if j.alive and j.ped ~= 0 then setupPilot(j) end
             end
         end
     end

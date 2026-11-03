@@ -62,18 +62,46 @@ end
 -- ENTIDADES / JOGADORES
 -- ---------------------------------------------------------------------------
 local function entityFromNetId(netId)
-    if not netId or netId <= 0 then return 0 end
-    if type(NetworkGetEntityFromNetworkId) ~= 'function' then return 0 end
-    local e = safeCall(NetworkGetEntityFromNetworkId, netId)
-    if not e or e == 0 then return 0 end
-    if type(DoesEntityExist) == 'function' and not safeCall(DoesEntityExist, e) then return 0 end
-    return e
+    return AeroEntity.FromNetId(netId)
 end
 
 local function netIdOf(entity)
-    if not entity or entity == 0 or type(NetworkGetNetworkIdFromEntity) ~= 'function' then return nil end
-    local id = safeCall(NetworkGetNetworkIdFromEntity, entity)
-    return (id and id > 0) and id or nil
+    return AeroEntity.NetId(entity)
+end
+
+--- Um caça é utilizável se a entidade real (handle direto OU via netId) estiver viva.
+--- netId pendente NÃO é destruição: CREATE_VEHICLE pode ainda não ter registrado
+--- o ID no OneSync. Isto evita o ciclo delete -> respawn que gerava os erros.
+local function jetUsable(jet)
+    if not jet or not jet.alive then return false end
+    if jet.entity and AeroEntity.Exists(jet.entity) then return true end
+    if jet.netId and AeroEntity.FromNetId(jet.netId) ~= 0 then return true end
+    return false
+end
+
+--- Resolve netIds que ainda não estavam registrados no tick da criação.
+--- Nunca chama DeleteEntity em handle inválido.
+local function resolvePendingNetIds()
+    local graceSec = ((I.SpawnGraceMs or 8000) / 1000.0) + 4.0
+    for slot, jet in pairs(fleet) do
+        if jet.pendingNetId then
+            if jet.entity and AeroEntity.Exists(jet.entity) then
+                local id = AeroEntity.NetId(jet.entity)
+                if id then
+                    jet.netId = id
+                    jet.pendingNetId = false
+                    jet.confirmedValid = true
+                    orderRevision = orderRevision + 1
+                    debugLog('netId resolvido no tick seguinte: slot', slot, id)
+                end
+            end
+            if jet.pendingNetId and (now() - (jet.createdAt or now())) > graceSec then
+                debugLog('netId nunca registrado; descartando registro do slot', slot)
+                fleet[slot] = nil       -- NÃO deletar handle possivelmente morto
+                spawnGuard[slot] = nil
+            end
+        end
+    end
 end
 
 local function readVehicleRuntime(veh)
@@ -232,9 +260,10 @@ local function spawnJet(slot, reason)
         return nil
     end
     local old = fleet[slot]
-    if old and old.netId and entityFromNetId(old.netId) ~= 0 then
+    if old and jetUsable(old) then
         return old  -- já existe: nunca duplicar
     end
+    if old then fleet[slot] = nil end  -- registro órfão: descarta sem tocar no handle
 
     spawnGuard[slot] = true
     local base = Cfg.Base or {}
@@ -242,99 +271,113 @@ local function spawnJet(slot, reason)
         { x = -2245.0, y = 3162.0, z = 32.7, h = 60.0 }
 
     local veh = 0
-    local ped = 0
     if type(CreateVehicle) == 'function' then
         veh = safeCall(CreateVehicle, ACfg.Model or `lazer`, spawnPoint.x, spawnPoint.y,
             spawnPoint.z, spawnPoint.h or 60.0, true, true) or 0
     end
-    if veh == 0 then
+    -- NUNCA chamar DeleteEntity em handle inválido (0xFAA3D236).
+    if veh == 0 or not AeroEntity.Exists(veh) then
         spawnGuard[slot] = nil
-        debugLog('FALHA ao criar veículo slot', slot)
+        debugLog('CREATE_VEHICLE sem entidade válida, slot', slot, 'handle', veh)
         return nil
     end
 
+    local ped = 0
     if type(CreatePed) == 'function' then
         ped = safeCall(CreatePed, 4, ACfg.PilotModel or `s_m_m_pilot_02`, spawnPoint.x,
             spawnPoint.y, spawnPoint.z + 1.0, spawnPoint.h or 60.0, true, true) or 0
     end
+    if ped ~= 0 and not AeroEntity.Exists(ped) then ped = 0 end
 
-    local vehNet = netIdOf(veh)
-    local pedNet = ped ~= 0 and netIdOf(ped) or nil
-    if not vehNet then
-        if type(DeleteEntity) == 'function' then safeCall(DeleteEntity, veh) end
-        if ped ~= 0 and type(DeleteEntity) == 'function' then safeCall(DeleteEntity, ped) end
-        spawnGuard[slot] = nil
-        return nil
-    end
-
-    if ped ~= 0 and type(SetPedIntoVehicle) == 'function' then
-        safeCall(SetPedIntoVehicle, ped, veh, -1)
-    end
-    if type(SetVehicleNumberPlateText) == 'function' then
-        safeCall(SetVehicleNumberPlateText, veh, jetPlate(slot))
-    end
-    if type(SetVehicleEngineOn) == 'function' then
-        safeCall(SetVehicleEngineOn, veh, false, true, true)
-    end
-    if type(SetEntityAsMissionEntity) == 'function' then
-        safeCall(SetEntityAsMissionEntity, veh, true, true)
-        if ped ~= 0 then safeCall(SetEntityAsMissionEntity, ped, true, true) end
-    end
-
-    -- Statebags: permitem ao client-host identificar e configurar o piloto
-    if type(Entity) == 'function' then
-        local ok, ent = pcall(Entity, veh)
-        if ok and ent and ent.state then
-            pcall(function()
-                ent.state:set('aeroMissionJet', {
-                    slot = slot, netId = vehNet, pedNetId = pedNet,
-                    callsign = callsign(slot), plate = jetPlate(slot),
-                    createdAt = now(),
-                }, true)
-            end)
+    -- Configurações só com handles vivos, validados imediatamente antes.
+    if AeroEntity.Exists(veh) then
+        if ped ~= 0 and AeroEntity.Exists(ped) and type(SetPedIntoVehicle) == 'function' then
+            safeCall(SetPedIntoVehicle, ped, veh, -1)
+        end
+        if type(SetVehicleNumberPlateText) == 'function' then
+            safeCall(SetVehicleNumberPlateText, veh, jetPlate(slot))
+        end
+        if type(SetVehicleEngineOn) == 'function' then
+            safeCall(SetVehicleEngineOn, veh, false, true, true)
+        end
+        if type(SetEntityAsMissionEntity) == 'function' then
+            safeCall(SetEntityAsMissionEntity, veh, true, true)
+            if ped ~= 0 and AeroEntity.Exists(ped) then
+                safeCall(SetEntityAsMissionEntity, ped, true, true)
+            end
         end
     end
 
+    -- NetId pode não estar registrado ainda: guarda o handle e resolve no tick seguinte.
+    local vehNet = AeroEntity.NetId(veh)
+    local pedNet = (ped ~= 0 and AeroEntity.Exists(ped)) and AeroEntity.NetId(ped) or nil
+
+    local stateBag = AeroEntity.State(veh)
+    if stateBag then
+        pcall(function()
+            stateBag:set('aeroMissionJet', {
+                slot = slot, netId = vehNet, pedNetId = pedNet,
+                callsign = callsign(slot), plate = jetPlate(slot),
+                createdAt = now(),
+            }, true)
+        end)
+    end
+
     fleet[slot] = {
-        slot       = slot,
-        callsign   = callsign(slot),
-        plate      = jetPlate(slot),
-        netId      = vehNet,
-        pedNetId   = pedNet,
-        alive      = true,
-        available  = true,
-        phase      = 'STORED',
-        missionId  = nil,
-        pos        = vec(spawnPoint.x, spawnPoint.y, spawnPoint.z),
-        speed      = 0,
-        health     = 1000,
-        engineOn   = false,
-        createdAt  = now(),
-        lastReport = 0,
+        slot           = slot,
+        callsign       = callsign(slot),
+        plate          = jetPlate(slot),
+        netId          = vehNet,
+        pedNetId       = pedNet,
+        entity         = veh,
+        pedEntity      = ped,
+        pendingNetId   = vehNet == nil,
+        confirmedValid = AeroEntity.Exists(veh),
+        alive          = true,
+        available      = true,
+        phase          = 'STORED',
+        missionId      = nil,
+        pos            = vec(spawnPoint.x, spawnPoint.y, spawnPoint.z),
+        speed          = 0,
+        health         = 1000,
+        engineOn       = false,
+        createdAt      = now(),
+        lastReport     = 0,
     }
     spawnGuard[slot] = nil
     lastDestroyedAt[slot] = nil
-    debugLog('caça criado slot', slot, 'netId', vehNet, 'motivo', reason or 'novo')
+    debugLog('caça criado slot', slot, 'netId', vehNet or 'PENDENTE', 'motivo', reason or 'novo')
     return fleet[slot]
 end
 
 local function despawnJet(slot)
     local jet = fleet[slot]
     if not jet then return end
-    if jet.netId then
-        local veh = entityFromNetId(jet.netId)
-        if veh ~= 0 and type(DeleteEntity) == 'function' then safeCall(DeleteEntity, veh) end
-    end
-    if jet.pedNetId then
-        local ped = entityFromNetId(jet.pedNetId)
-        if ped ~= 0 and type(DeleteEntity) == 'function' then safeCall(DeleteEntity, ped) end
-    end
+    -- Idempotência ANTES de qualquer native: impede delete duplo no mesmo handle.
     fleet[slot] = nil
     spawnGuard[slot] = nil
+
+    local veh = 0
+    if jet.entity and AeroEntity.Exists(jet.entity) then
+        veh = jet.entity
+    elseif jet.netId then
+        veh = AeroEntity.FromNetId(jet.netId)
+    end
+    if veh ~= 0 then AeroEntity.Delete(veh) end
+
+    local ped = 0
+    if jet.pedEntity and AeroEntity.Exists(jet.pedEntity) then
+        ped = jet.pedEntity
+    elseif jet.pedNetId then
+        ped = AeroEntity.FromNetId(jet.pedNetId)
+    end
+    if ped ~= 0 then AeroEntity.Delete(ped) end
 end
 
 local function despawnAllFleet()
-    for slot in pairs(fleet) do despawnJet(slot) end
+    local slots = {}
+    for slot in pairs(fleet) do slots[#slots + 1] = slot end
+    for i = 1, #slots do despawnJet(slots[i]) end
 end
 
 --- Reaproveita caças no ar; só cria o que estiver faltando (item 12)
@@ -346,7 +389,7 @@ local function ensurePair(mission)
 
     for slot = 1, wanted do
         local jet = fleet[slot]
-        if jet and jet.netId and jet.alive and entityFromNetId(jet.netId) ~= 0 and jet.phase ~= 'PARKED' then
+        if jet and jet.alive and jetUsable(jet) and jet.phase ~= 'PARKED' then
             chosen[#chosen + 1] = slot
             reused = reused + 1
         end
@@ -411,7 +454,7 @@ local function anyJetAlive(mission)
     if not mission or not mission.jets then return false end
     for i = 1, #mission.jets do
         local jet = fleet[mission.jets[i]]
-        if jet and jet.alive and jet.netId and entityFromNetId(jet.netId) ~= 0 then return true end
+        if jetUsable(jet) then return true end
     end
     return false
 end
@@ -421,7 +464,7 @@ local function aliveJetCount(mission)
     if not mission or not mission.jets then return 0 end
     for i = 1, #mission.jets do
         local jet = fleet[mission.jets[i]]
-        if jet and jet.alive and jet.netId and entityFromNetId(jet.netId) ~= 0 then n = n + 1 end
+        if jetUsable(jet) then n = n + 1 end
     end
     return n
 end
@@ -499,12 +542,14 @@ local function buildOrder()
         weaponsCfg = toPlain(Cfg.Weapons),
         zones = toPlain(Cfg.ProtectedZones),
         intervalMs = I.AiTickMs or 500,
+        streamingGraceMs = I.StreamingGraceMs or 8000,
+        spawnGraceMs = I.SpawnGraceMs or 8000,
         jets = {},
     }
     for slot, jet in pairs(fleet) do
         order.jets[#order.jets + 1] = {
             slot = slot, netId = jet.netId, pedNetId = jet.pedNetId,
-            callsign = jet.callsign, phase = jet.phase,
+            callsign = jet.callsign, phase = jet.phase, pending = jet.pendingNetId == true,
         }
     end
     if m then
@@ -1067,6 +1112,17 @@ end
 -- ---------------------------------------------------------------------------
 -- VERIFICAÇÃO DE DESTRUIÇÃO / SUBSTITUIÇÃO DOS CAÇAS (item 11)
 -- ---------------------------------------------------------------------------
+--- Um report de destruição vindo do client-host só é aceito DEPOIS da janela
+--- de registro/streaming e apenas se a entidade já foi confirmada viva.
+--- "Não encontrei a entidade no meu client" ≠ "caça destruído".
+local function canDeclareDestroyed(slot)
+    local jet = fleet[slot]
+    if not jet then return false end
+    local graceSec = (I.SpawnGraceMs or 8000) / 1000.0
+    if (now() - (jet.createdAt or now())) < graceSec then return false end
+    return jet.confirmedValid == true
+end
+
 local function markJetDestroyed(slot, actor)
     local jet = fleet[slot]
     if not jet or not jet.alive then return end
@@ -1114,19 +1170,35 @@ local function replaceDestroyedPair(m, actor)
 end
 
 local function checkJetsAlive(m)
+    local graceSec = (I.SpawnGraceMs or 8000) / 1000.0
     for slot, jet in pairs(fleet) do
-        if jet.alive and jet.netId then
-            local veh = entityFromNetId(jet.netId)
+        -- Dentro da janela de registro/streaming, ausência NÃO é destruição.
+        local graceExpired = (now() - (jet.createdAt or now())) >= graceSec
+        if jet.alive and graceExpired then
+            local veh = 0
+            if jet.entity and AeroEntity.Exists(jet.entity) then
+                veh = jet.entity
+            elseif jet.netId then
+                veh = AeroEntity.FromNetId(jet.netId)
+            end
+
             if veh == 0 then
-                markJetDestroyed(slot, 'SISTEMA')
-            elseif type(GetEntityHealth) == 'function' then
-                local health = tonumber(safeCall(GetEntityHealth, veh)) or 1000
+                -- Só declara destruição se a entidade já foi confirmada viva antes.
+                if jet.confirmedValid then markJetDestroyed(slot, 'SISTEMA') end
+            else
+                jet.confirmedValid = true
+                local health = tonumber(AeroEntity.Read(veh, GetEntityHealth, 1000)) or 1000
                 if health <= 0 then markJetDestroyed(slot, 'SISTEMA') end
             end
         end
     end
-    if m and aliveJetCount(m) == 0 and not replacementGuard then
-        replaceDestroyedPair(m, 'SISTEMA')
+    if m and aliveJetCount(m) == 0 and not replacementGuard and #(m.jets or {}) > 0 then
+        -- Não substitui enquanto houver netId pendente (entidade ainda nascendo).
+        local pending = false
+        for slot, jet in pairs(fleet) do
+            if jet.pendingNetId then pending = true end
+        end
+        if not pending then replaceDestroyedPair(m, 'SISTEMA') end
     end
 end
 
@@ -1628,7 +1700,9 @@ RegisterNetEvent('aero_pilot:server:aiReport', function(report)
                 jet.health = tonumber(j.health) or jet.health or 1000
                 jet.engineOn = j.engineOn == true
                 jet.lastReport = now()
-                if j.alive == false then markJetDestroyed(slot, 'HOST IA') end
+                if j.alive == false and canDeclareDestroyed(slot) then
+                    markJetDestroyed(slot, 'HOST IA')
+                end
                 if j.phase then jet.phase = tostring(j.phase):sub(1, 32) end
             end
         end
@@ -1665,7 +1739,11 @@ RegisterNetEvent('aero_pilot:server:aiEvent', function(evt)
     elseif kind == 'TARGET_DESTROYED' and m then
         handleTargetDestroyed(m, actor)
     elseif kind == 'JET_DESTROYED' and slot then
-        markJetDestroyed(slot, actor)
+        if canDeclareDestroyed(slot) then
+            markJetDestroyed(slot, actor)
+        else
+            debugLog('JET_DESTROYED ignorado (janela de registro / não confirmado), slot', slot)
+        end
     elseif kind == 'PILOT_EXIT' and m then
         logMission(m.id, 'Piloto/ocupante saiu da aeronave alvo. Caças focam na AERONAVE, não no personagem.', actor)
     elseif kind == 'ATTACK_UNEFFECTIVE' and m then
@@ -1727,6 +1805,7 @@ CreateThread(function()
         Wait(I.ServerTickMs or 500)
         if cfgEnabled() then
             AeroHistory.Flush(false)
+            resolvePendingNetIds()
 
             if aiHost and type(GetPlayerPed) == 'function' then
                 local ped = safeCall(GetPlayerPed, aiHost)
@@ -1804,4 +1883,9 @@ AeroMissions.Test = {
     SetSnapshot          = function(snap) AeroRadarSnapshot = snap end,
     FleetReturn          = fleetReturn,
     PushOrders           = function() pushOrders('test') end,
+    -- Hooks da correção de entidades inválidas (OneSync)
+    JetUsable            = jetUsable,
+    CanDeclareDestroyed  = canDeclareDestroyed,
+    DespawnJet           = despawnJet,
+    ResolvePendingNetIds = resolvePendingNetIds,
 }

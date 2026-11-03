@@ -207,7 +207,12 @@ function AeroUtils.BuildRadarData(myVeh, myCoords, myCompassDeg, myRadarActive, 
     local gameHeadingDeg = (360.0 - (tonumber(myCompassDeg) or 0.0)) % 360.0
 
     if myRadarActive then
-        local myNetId = NetworkGetEntityIsNetworked(myVeh) and NetworkGetNetworkIdFromEntity(myVeh) or -1
+        -- Revalida antes da native: em handle morto 0x9E35DAB6 registra erro.
+        local myNetId = -1
+        if myVeh and myVeh ~= 0 and DoesEntityExist(myVeh) and NetworkGetEntityIsNetworked(myVeh) then
+            local ok, id = pcall(NetworkGetNetworkIdFromEntity, myVeh)
+            if ok and type(id) == 'number' then myNetId = id end
+        end
         local rad = math.rad(gameHeadingDeg)
         local cosH = math.cos(rad)
         local sinH = math.sin(rad)
@@ -318,7 +323,14 @@ function AeroUtils.SyncVehicleState(vehicle, stateTable)
     if not NetworkGetEntityIsNetworked(vehicle) then
         return
     end
-    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    -- Revalida imediatamente antes da native: evita 0x9E35DAB6 em handle morto.
+    if not DoesEntityExist(vehicle) then
+        return
+    end
+    local ok, netId = pcall(NetworkGetNetworkIdFromEntity, vehicle)
+    if not ok or type(netId) ~= 'number' then
+        return
+    end
     if netId and netId ~= 0 then
         stateTable.agl = math.floor((GetEntityHeightAboveGround(vehicle) or 0.0) * 10) / 10
         TriggerServerEvent('aero_pilot:server:syncState', netId, stateTable)

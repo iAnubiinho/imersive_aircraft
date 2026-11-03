@@ -407,6 +407,10 @@ Config.Missions = {
         HistorySaveDebounceMs = 1500,
         AlertBeepMs           = 2600,
         AiReportMs            = 1000,
+        -- Janela de tolerância para registro/streaming de entidades no OneSync.
+        -- Evita que "ainda não sincronizou" seja interpretado como "destruído".
+        SpawnGraceMs          = 8000,
+        StreamingGraceMs      = 8000,
     },
 
     -- ------------------------------------------------------------------------
