@@ -1,5 +1,5 @@
 -- ============================================================================
--- AERO PILOT — HARNESS DE AUTO-TESTE DO SISTEMA DE MISSÕES (37 CENÁRIOS)
+-- AERO PILOT — HARNESS DE AUTO-TESTE DO SISTEMA DE MISSÕES (37 CENÁRIOS + REGRESSÕES DE ENTIDADE)
 -- Roda NO SERVIDOR via console:  aero_missions_selftest
 -- Testa a LÓGICA PURA (estados, cronômetros, zonas, pouso, permissões e
 -- persistência). Cenários de física de voo/IA nativa exigem verificação
@@ -456,6 +456,64 @@ local function runAll()
         check(D.IsValidTransition('COMPLETED', 'ATTACKING') == false, 'estado terminal violado')
         check(D.IsValidTransition('PENDING', 'COMPLETED') == false, 'pulou estados obrigatórios')
         check(D.IsValidTransition('PARKING', 'COMPLETED') == true, 'encerramento correto bloqueado')
+    end)
+
+    -- 41 — Guarda de entidades: nenhuma native em handle inválido
+    test(41, 'Handles inválidos nunca alcançam as natives de entidade', function()
+        local G = AeroEntity
+        check(type(G) == 'table', 'AeroEntity não carregado antes de main/missions')
+        check(G.Exists(0) == false, 'handle 0 considerado existente')
+        check(G.Exists(-1) == false, 'handle negativo considerado existente')
+        check(G.Exists(nil) == false, 'handle nil considerado existente')
+        check(G.Exists('abc') == false, 'handle não numérico considerado existente')
+        check(G.NetId(0) == nil, 'netId pedido para handle 0')
+        check(G.FromNetId(0) == 0, 'entidade pedida para netId 0')
+        check(G.FromNetId(nil) == 0, 'entidade pedida para netId nil')
+        check(G.Delete(0) == false, 'delete executado em handle 0')
+    end)
+
+    -- 42 — netId pendente NÃO é destruição (causa do ciclo delete/respawn)
+    test(42, 'Caça com netId pendente ou entidade viva é considerado utilizável', function()
+        check(T.JetUsable({ alive = true, entity = 1001, pendingNetId = true }) == true,
+            'entidade viva com netId pendente foi dada como morta')
+        check(T.JetUsable({ alive = true, netId = 55 }) == true,
+            'netId válido não resolveu para entidade viva')
+        check(T.JetUsable({ alive = false, entity = 1001 }) == false,
+            'caça marcado morto foi considerado utilizável')
+        check(T.JetUsable(nil) == false, 'registro ausente considerado utilizável')
+    end)
+
+    -- 43 — janela de registro/streaming bloqueia falso JET_DESTROYED
+    test(43, 'Falso JET_DESTROYED é ignorado dentro da janela de registro', function()
+        local fleet = AeroMissions.GetFleet()
+        check(type(fleet) == 'table', 'frota não acessível ao harness')
+        fleet[77] = { alive = true, createdAt = os.time(), confirmedValid = true, netId = 501 }
+        check(T.CanDeclareDestroyed(77) == false, 'destruição aceita durante o streaming')
+        fleet[77].createdAt = os.time() - 999
+        check(T.CanDeclareDestroyed(77) == true, 'destruição real bloqueada após a janela')
+        fleet[77].confirmedValid = false
+        check(T.CanDeclareDestroyed(77) == false, 'destruição aceita sem entidade confirmada')
+        check(T.CanDeclareDestroyed(78) == false, 'slot inexistente aceitou destruição')
+        fleet[77] = nil
+    end)
+
+    -- 44 — delete idempotente: despawn repetido não toca no handle duas vezes
+    test(44, 'Despawn é idempotente e não duplica DeleteEntity', function()
+        local fleet = AeroMissions.GetFleet()
+        local oldDelete, oldExists = DeleteEntity, DoesEntityExist
+        local calls = 0
+        DeleteEntity = function(h) calls = calls + 1 end
+        DoesEntityExist = function(h) return h == 1001 or h == 1002 end
+        fleet[78] = { alive = true, entity = 1001, pedEntity = 1002, netId = 502, pedNetId = 503 }
+        T.DespawnJet(78)
+        local first = calls
+        T.DespawnJet(78)
+        check(first > 0, 'entidade viva não foi removida no despawn')
+        check(calls == first, 'segundo despawn chamou DeleteEntity novamente')
+        check(fleet[78] == nil, 'registro da frota não foi limpo')
+        DoesEntityExist = oldExists
+        DeleteEntity = oldDelete
+        fleet[78] = nil
     end)
 
     local passed, failed = 0, 0

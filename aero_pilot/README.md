@@ -73,7 +73,8 @@ mecanismo de permissão **já existente** do painel. **Nenhuma dependência nova
 |---|---|
 | `config.lua` | **TODAS** as configurações (originais + novas) |
 | `shared/mission_defs.lua` | Estados, transições válidas, rótulos, geometria de zonas, formatação (lógica pura) |
-| `server/main.lua` | Radar original (inalterado na lógica) + `AeroRadarSnapshot`, `AeroActiveControllers`, `AeroStationPermission` |
+| `server/entity_guard.lua` | **Carregado primeiro**: validação central de handles/netIds antes de qualquer native que desreferencia entidade |
+| `server/main.lua` | Radar original (inalterado na lógica) + `AeroRadarSnapshot`, `AeroActiveControllers`, `AeroStationPermission`; coleta de veículos via `AeroEntity` |
 | `server/history.lua` | Adaptador de persistência JSON, ACE, confirmação e log administrativo |
 | `server/missions.lua` | **Autoridade**: máquina de estados, frota, cronômetros, zonas, host de IA, feed |
 | `server/…` | `playerDropped`, `onResourceStop`, limpeza de entidades |
@@ -83,7 +84,7 @@ mecanismo de permissão **já existente** do painel. **Nenhuma dependência nova
 | `html/missions.css` | Estilos novos reaproveitando as variáveis visuais originais |
 | `html/missions.js` | Renderização das abas, menu de contexto, confirmação, demo para preview |
 | `html/script.js` | **Editado minimamente**: rótulo compacto do radar de bordo + `data-contact-id` nos cards |
-| `tests/missions_selftest.lua` | Harness dos 37 cenários (+3 extras) executável no servidor |
+| `tests/missions_selftest.lua` | Harness dos 37 cenários + 7 regressões (44 testes) executável no servidor |
 | `tests/TESTES.md` | Roteiro de verificação in-game |
 | `tests/validate.sh` | Validação estática (Lua/JS/JSON/referências) |
 
@@ -134,7 +135,7 @@ alvo se desloca mais que `GoalRetaskDelta`.
 | `Config.Missions.Airports` | `ZANCUDO`, `LSIA` — coords, raio de confirmação, pista |
 | `Config.Missions.LandingCheck` | velocidade, altura, estabilidade, motor desligado |
 | `Config.Missions.Timings` | 600 / 600 / 300 / 300 / 10 s, exibição da última posição (120 s), limites de ataque |
-| `Config.Missions.Intervals` | `ServerTickMs=500`, `AiTickMs=500`, `MissionFeedMs=1000`, `AiReportMs=1000`, debounce do histórico, beep do alerta |
+| `Config.Missions.Intervals` | `ServerTickMs=500`, `AiTickMs=500`, `MissionFeedMs=1000`, `AiReportMs=1000`, **`SpawnGraceMs=8000`**, **`StreamingGraceMs=8000`**, debounce do histórico, beep do alerta |
 | `Config.Missions.Search` | `EXPANDING_SQUARE`/`ORBIT`, raio, altitude, pernas |
 | `Config.Missions.ProtectedZones` | **Los Santos em polígono de 4 coordenadas (inclui LSIA)** + exemplos comentados de círculo e de novo polígono; `minAltitude`/`maxAltitude` opcionais |
 | `Config.Missions.Alerts` | Os 3 textos, cor amarela, `BlinkMs`, som nativo + fallback |
@@ -195,7 +196,7 @@ não exige mudar a máquina de estados.
    escrita pode corromper o arquivo. Há debounce (1,5 s) e arquivo inicial válido;
    para produção com muitos registros, troque o backend por SQL.
 6. **Nenhum runtime FiveM neste sandbox:** validação feita por parse Lua/JS, VM Lua
-   com stubs (40 testes), checagem de referências NUI/JSON e preview HTML. Os 37
+   com stubs (44 testes), checagem de referências NUI/JSON e preview HTML. Os 37
    cenários de voo/IA precisam do roteiro em `tests/TESTES.md` no seu servidor.
 7. **Natives de armamento:** `TASK_PLANE_MISSION` flag 6 + `SET_CURRENT_PED_VEHICLE_WEAPON`
    + `SET_VEHICLE_SHOOT_AT_TARGET`. O dano é o dano real do jogo; não há
@@ -213,10 +214,10 @@ não exige mudar a máquina de estados.
 | Permissão por job QBCore / abertura por `[E]` | **Inalterada**; ACE é uma permissão **à parte**, só para excluir histórico |
 | Cockpit, startup, autopilot, estabilizador, sonar Kosatka | **Sem alterações funcionais** |
 | `html/script.js` / `style.css` | `script.js`: 2 ajustes pontuais (rótulo do blip + `data-contact-id`); `style.css`: **nenhuma linha alterada** (novo arquivo `missions.css`) |
-| `server/main.lua` | 3 adições não invasivas (globais de integração + `plate` no tráfego de bordo + snapshot) |
+| `server/main.lua` | 3 adições não invasivas (globais de integração + `plate` no tráfego de bordo + snapshot); laço de coleta agora descarta handles inválidos via `AeroEntity` |
 
-Revisão de erros: `bash tests/validate.sh` → 14 arquivos Lua, 3 JS, JSON e 21 IDs NUI
-consistentes; `aero_missions_selftest` → **40/40 OK** em VM Lua com stubs.
+Revisão de erros: `bash tests/validate.sh` → 15 arquivos Lua, 3 JS, JSON e 21 IDs NUI
+consistentes; `aero_missions_selftest` → **44/44 OK** em VM Lua com stubs.
 
 ---
 
@@ -225,3 +226,45 @@ consistentes; `aero_missions_selftest` → **40/40 OK** em VM Lua com stubs.
 `F7` cursor do cockpit · `F6` recolher painel · `I` radar/transponder · `B` freio ·
 `J` piloto automático · `K` estabilizador · `E` abrir Tablet ATC.
 **Botão direito** no Tablet = menu de missões/comandos.
+
+---
+
+## 11. Correção: `Tried to access invalid entity` (`0x9E35DAB6` / `0xFAA3D236`)
+
+**Sintoma:** os caças apareciam normalmente, mas o console repetia, sempre no mesmo
+handle, `NETWORK_GET_NETWORK_ID_FROM_ENTITY` seguido de `DELETE_ENTITY` (server CFX).
+
+**Causa:** não era falha de criação. Em OneSync, o client-host recebia os netIds antes
+de as entidades estarem streamadas, interpretava `NetToVeh() == 0` como
+`JET_DESTROYED` e o servidor substituía a dupla. O `despawnJet` deletava entidades
+recém-criadas (às duas vezes) e o laço do radar (`server/main.lua`) pedia o netId dos
+handles já mortos. Isso realimentava o ciclo `delete → respawn → delete`.
+
+**Correção aplicada (sem alterar regras de missão):**
+
+1. `server/entity_guard.lua` (primeiro `server_script`) centraliza `AeroEntity.Exists`,
+   `NetId`, `FromNetId`, `Delete`, `Read` e `State`. Nenhuma native que desreferencia
+   entidade é chamada sem `DoesEntityExist` **imediatamente antes**. `pcall` sozinho
+   não suprime o log do `c-scripting-core`.
+2. `server/main.lua`: coleta de aeronaves extrainda para `collectVehicle()`; iteração
+   com netId inválido é **descartada**, não logada. `syncState` usa `AeroEntity.FromNetId`.
+3. `server/missions.lua`: `spawnJet` **nunca** chama `DeleteEntity` em handle inválido;
+   se o netId ainda não foi registrado, guarda o handle e resolve no tick seguinte
+   (`resolvePendingNetIds`). `despawnJet` remove o registro **antes** de deletar
+   (idempotente) e `despawnAllFleet` itera sobre cópia das chaves.
+4. `client/missions_ai.lua`: entidade ainda não streamada **não** é destruição;
+   só reporta `JET_DESTROYED` depois de tê-la visto viva e após `StreamingGraceMs`.
+5. `server/missions.lua`: `canDeclareDestroyed()` rejeita reports de destruição dentro
+   de `SpawnGraceMs` ou sem `confirmedValid`, inclusive vindos de `aiReport`.
+6. `client/utils.lua`: `BuildRadarData` e `SyncVehicleState` revalidam o veículo antes
+   de `NetworkGetNetworkIdFromEntity`.
+
+Configurações novas (em `Config.Missions.Intervals`): `SpawnGraceMs` e
+`StreamingGraceMs` (8000 ms). Aumente apenas se o seu servidor demorar mais que isso
+para registrar/streamar entidades.
+
+**Como confirmar no servidor:** com `Config.Missions.Debug = true`, iniciar uma missão
+e observar que NÃO há mais linhas `0x9E35DAB6` / `0xFAA3D236` e que os logs mostram
+`caça criado slot 1 netId <n>` (ou `PENDENTE` seguido de `netId resolvido no tick
+seguinte`) sem substituição imediata da dupla. Os testes 41–44 do harness cobrem as
+regressões: handles inválidos, netId pendente, falso `JET_DESTROYED` e delete duplo.

@@ -80,6 +80,22 @@ na aba **MISSÕES**. A aba **HISTÓRICO** consulta/exclui registros.
 Polígono de 4 coordenadas + zonas circulares + limites de altitude, unidades de
 distância (NM/KM/MI/M) e bloqueio de transições de estado inválidas.
 
+### Regressões de entidade (41–44) — `Tried to access invalid entity`
+
+| # | Cenário | Esperado |
+|---|---|---|
+| 41 | Handles `0`, negativos, `nil` e não numéricos | Nenhuma chamada a `NetworkGetNetworkIdFromEntity` / `DeleteEntity` |
+| 42 | Caça com `netId` pendente, entidade viva | Considerado utilizável; **não** dispara substituição |
+| 43 | `JET_DESTROYED` vindo do host durante o streaming | Ignorado dentro de `SpawnGraceMs`; aceito depois se confirmado |
+| 44 | Dois `despawnJet` seguidos no mesmo slot | Uma única remoção; registro limpo da frota |
+
+**Verificação in-game do bug original:** iniciar qualquer missão com
+`Config.Missions.Debug = true` e observar o console por ~30 s. Não devem aparecer
+`0x9E35DAB6` nem `0xFAA3D236`, os dois LAZER devem permanecer no ar (sem ciclo de
+delete/respawn) e o log deve mostrar `netId resolvido` quando o registro do OneSync
+atrasar. Repetir com `restart aero_pilot` durante a missão e com a saída do operador
+que era host de IA.
+
 ---
 
 ## Sinais de problema a observar in-game
@@ -87,3 +103,4 @@ distância (NM/KM/MI/M) e bloqueio de transições de estado inválidas.
 - `TASK_PLANE_LAND` não pousar → o fallback por `TASK_PLANE_MISSION` + `TASK_PLANE_TAXI` deve assumir após ~22 s.
 - Contato visual nunca estabelecido → em OneSync Infinity o alvo pode não estar streamado no host; reduza `VisualRangeMeters` ou use `VisualLosRequired = false`.
 - Disparo dentro de LS → **falha grave**: conferir `Config.Missions.ProtectedZones` e `order.zones`.
+- `Tried to access invalid entity` reaparecer → ativar `Config.Missions.Debug`, conferir a ordem dos `server_scripts` (`entity_guard.lua` **primeiro**) e aumentar `SpawnGraceMs` / `StreamingGraceMs` se o OneSync do servidor registrar entidades lentamente.

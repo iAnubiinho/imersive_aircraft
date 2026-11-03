@@ -134,8 +134,8 @@ RegisterNetEvent('aero_pilot:server:syncState', function(netId, stateData)
         return
     end
 
-    local veh = NetworkGetEntityFromNetworkId(netId)
-    if not veh or veh == 0 or not DoesEntityExist(veh) then
+    local veh = AeroEntity.FromNetId(netId)
+    if veh == 0 then
         return
     end
 
@@ -191,61 +191,72 @@ CreateThread(function()
             local onboardTraffic = {}
             local vehicles = GetAllVehicles()
 
+            -- Coleta UM veículo com validação imediata antes de cada native que
+            -- desreferencia a entidade. Retornar nil = descartar este handle.
+            -- Isso elimina "Tried to access invalid entity" em 0x9E35DAB6.
+            local function collectVehicle(veh)
+                if not AeroEntity.Exists(veh) then return nil end
+
+                local vType = missionSafeNative(GetVehicleType, veh)
+                if vType ~= 'plane' and vType ~= 'heli' then return nil end
+
+                local driver = missionSafeNative(GetPedInVehicleSeat, veh, -1)
+                local stateBag = AeroEntity.State(veh)
+                local st = stateBag and stateBag.aeroState or nil
+                local engineOn = missionSafeNative(GetIsVehicleEngineRunning, veh) == true
+                local pos = missionSafeNative(GetEntityCoords, veh)
+                local vel = missionSafeNative(GetEntityVelocity, veh)
+                if not pos or not vel then return nil end
+                local speedMps = math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
+
+                if not ((driver and driver ~= 0) or engineOn or (st and st.batteryOn)) then return nil end
+
+                -- PONTO CRÍTICO: netId NUNCA é solicitado com handle morto.
+                if not AeroEntity.Exists(veh) then return nil end
+                local netId = AeroEntity.NetId(veh)
+                if not netId then return nil end
+
+                local radarSwitchOn = st and (st.batteryOn == true and st.radarOn == true) or false
+                local plate = missionSafeNative(GetVehicleNumberPlateText, veh) or 'N/A'
+                plate = plate:gsub('^%s*(.-)%s*$', '%1')
+                local acftType = (vType == 'heli') and 'HELI' or 'PLANE'
+                local gameHdg = missionSafeNative(GetEntityHeading, veh) or 0.0
+                local hdg = math.floor(((360.0 - gameHdg) % 360.0) + 0.5) % 360
+
+                local entry = {
+                    netId = netId,
+                    type = acftType,
+                    plate = plate,
+                    x = math.floor(pos.x * 10) / 10,
+                    y = math.floor(pos.y * 10) / 10,
+                    z = math.floor(pos.z * 10) / 10,
+                    speedMps = speedMps,
+                    hdg = hdg,
+                    radarOn = radarSwitchOn,
+                    engineOn = engineOn,
+                    occupant = (driver ~= nil and driver ~= 0),
+                    inAir = missionSafeNative(IsEntityInAir, veh) == true,
+                    heightAboveGround = missionSafeNative(GetEntityHeightAboveGround, veh) or 0.0,
+                    health = missionSafeNative(GetEntityHealth, veh) or 1000,
+                }
+                return entry, radarSwitchOn
+            end
+
             for i = 1, #vehicles do
-                local veh = vehicles[i]
-                if DoesEntityExist(veh) then
-                    local vType = GetVehicleType(veh)
-                    if vType == 'plane' or vType == 'heli' then
-                        local driver = GetPedInVehicleSeat(veh, -1)
-                        local st = Entity(veh).state.aeroState
-                        local engineOn = GetIsVehicleEngineRunning(veh)
-                        local pos = GetEntityCoords(veh)
-                        local vel = GetEntityVelocity(veh)
-                        local speedMps = math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z)
-
-                        if (driver and driver ~= 0) or engineOn or (st and st.batteryOn) then
-                            local netId = NetworkGetNetworkIdFromEntity(veh)
-                            local radarSwitchOn = st and (st.batteryOn == true and st.radarOn == true) or false
-                            local plate = GetVehicleNumberPlateText(veh) or 'N/A'
-                            plate = plate:gsub('^%s*(.-)%s*$', '%1')
-
-                            local acftType = (vType == 'heli') and 'HELI' or 'PLANE'
-                            local gameHdg = GetEntityHeading(veh) or 0.0
-                            local hdg = math.floor(((360.0 - gameHdg) % 360.0) + 0.5) % 360
-
-                            local entry = {
-                                netId = netId,
-                                type = acftType,
-                                plate = plate,
-                                x = math.floor(pos.x * 10) / 10,
-                                y = math.floor(pos.y * 10) / 10,
-                                z = math.floor(pos.z * 10) / 10,
-                                speedMps = speedMps,
-                                hdg = hdg,
-                                radarOn = radarSwitchOn,
-                                engineOn = engineOn,
-                                -- Campos adicionais para o gerenciador de missões
-                                occupant = (driver ~= nil and driver ~= 0),
-                                inAir = missionSafeNative(IsEntityInAir, veh) == true,
-                                heightAboveGround = missionSafeNative(GetEntityHeightAboveGround, veh) or 0.0,
-                                health = missionSafeNative(GetEntityHealth, veh) or 1000,
-                            }
-
-                            allAircraft[#allAircraft + 1] = entry
-
-                            if radarSwitchOn then
-                                onboardTraffic[#onboardTraffic + 1] = {
-                                    netId = netId,
-                                    type = acftType,
-                                    plate = plate,
-                                    x = entry.x,
-                                    y = entry.y,
-                                    z = entry.z,
-                                    hdg = hdg,
-                                    radarOn = true,
-                                }
-                            end
-                        end
+                local entry, radarSwitchOn = collectVehicle(vehicles[i])
+                if entry then
+                    allAircraft[#allAircraft + 1] = entry
+                    if radarSwitchOn then
+                        onboardTraffic[#onboardTraffic + 1] = {
+                            netId = entry.netId,
+                            type = entry.type,
+                            plate = entry.plate,
+                            x = entry.x,
+                            y = entry.y,
+                            z = entry.z,
+                            hdg = entry.hdg,
+                            radarOn = true,
+                        }
                     end
                 end
             end

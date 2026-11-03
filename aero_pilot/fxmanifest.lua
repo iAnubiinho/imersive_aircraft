@@ -33,7 +33,9 @@ client_scripts {
 }
 
 server_scripts {
-    -- main.lua primeiro: expõe AeroActiveControllers / AeroStationPermission /
+    -- Guarda de entidades PRIMEIRO: usada pelo radar e pelas missões.
+    'server/entity_guard.lua',
+    -- main.lua em seguida: expõe AeroActiveControllers / AeroStationPermission /
     -- AeroRadarSnapshot (radar original intacto) para o gerenciador de missões.
     'server/main.lua',
     'server/history.lua',
