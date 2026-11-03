@@ -504,7 +504,8 @@ local function runAll()
         local calls = 0
         DeleteEntity = function(h) calls = calls + 1 end
         DoesEntityExist = function(h) return h == 1001 or h == 1002 end
-        fleet[78] = { alive = true, entity = 1001, pedEntity = 1002, netId = 502, pedNetId = 503 }
+        fleet[78] = { alive = true, entity = 1001, pedEntity = 1002,
+            netId = 502, pedNetId = 502 }
         T.DespawnJet(78)
         local first = calls
         T.DespawnJet(78)
@@ -514,6 +515,107 @@ local function runAll()
         DoesEntityExist = oldExists
         DeleteEntity = oldDelete
         fleet[78] = nil
+    end)
+
+    -- 45 — pendente (sem netId) NUNCA chama DELETE_ENTITY
+    test(45, 'Despawn de caça pendente não executa DELETE_ENTITY', function()
+        local fleet = AeroMissions.GetFleet()
+        local oldDelete, oldExists = DeleteEntity, DoesEntityExist
+        local calls = 0
+        DeleteEntity = function(h) calls = calls + 1 end
+        DoesEntityExist = function(h) return true end
+        fleet[79] = { alive = true, entity = 1001, pedEntity = 1002,
+            pendingNetId = true, netId = nil, pedNetId = nil }
+        T.DespawnJet(79)
+        check(calls == 0, 'DELETE_ENTITY chamado com handle cru de CreateVehicle')
+        check(fleet[79] == nil, 'registro pendente não foi limpo')
+        DoesEntityExist = oldExists
+        DeleteEntity = oldDelete
+        fleet[79] = nil
+    end)
+
+    -- 46 — supressão Lua: a native proibida nunca é alcançada
+    test(46, 'Handle pendente nunca alcança NETWORK_GET_NETWORK_ID_FROM_ENTITY', function()
+        local old = NetworkGetNetworkIdFromEntity
+        local calls = 0
+        NetworkGetNetworkIdFromEntity = function(h) calls = calls + 1; return 4242 end
+        AeroEntity.Suppress(7777)
+        check(AeroEntity.IsSuppressed(7777) == true, 'handle não marcado como pendente')
+        check(AeroEntity.NetId(7777) == nil, 'netId inventado para handle pendente')
+        check(calls == 0, 'native invocada com handle pendente')
+        AeroEntity.RememberNetId(7777, 909)
+        check(AeroEntity.NetId(7777) == 909, 'netId informado pelo client não foi usado')
+        check(calls == 0, 'native invocada mesmo com netId já conhecido')
+        AeroEntity.Forget(7777)
+        check(AeroEntity.IsSuppressed(7777) == false, 'supressão não removida')
+        check(AeroEntity.KnownNetId(7777) == nil, 'cache de netId não limpo')
+        NetworkGetNetworkIdFromEntity = old
+    end)
+
+    -- 47 — delete só com handle validado por netId
+    test(47, 'DELETE_ENTITY recusa handle cru mesmo com DoesEntityExist=true', function()
+        local oldDelete, oldExists = DeleteEntity, DoesEntityExist
+        local calls = 0
+        DeleteEntity = function(h) calls = calls + 1 end
+        DoesEntityExist = function(h) return true end
+        check(AeroEntity.Delete(8888) == false, 'delete aceitou handle não validado')
+        check(calls == 0, 'DELETE_ENTITY executado em handle cru')
+        DoesEntityExist = oldExists
+        DeleteEntity = oldDelete
+    end)
+
+    -- 48 — fluxo completo: spawn -> netId resolvido pelo client -> despawn
+    test(48, 'Fluxo spawn/netId/despawn não usa as natives proibidas no servidor', function()
+        local old = {
+            veh = CreateVehicle, ped = CreatePed, exists = DoesEntityExist,
+            net = NetworkGetNetworkIdFromEntity, from = NetworkGetEntityFromNetworkId,
+            del = DeleteEntity, plate = GetVehicleNumberPlateText,
+        }
+        local netCalls, delCalls, netTargets = 0, 0, {}
+        CreateVehicle = function() return 6001 end
+        CreatePed = function() return 6002 end
+        DoesEntityExist = function(h)
+            return h == 6001 or h == 6002 or h == 1001 or h == 1002
+        end
+        NetworkGetNetworkIdFromEntity = function(h)
+            netCalls = netCalls + 1
+            netTargets[#netTargets + 1] = h
+            return 0
+        end
+        NetworkGetEntityFromNetworkId = function(id)
+            if id == 9191 or id == 9192 then return 6001 end
+            return 0
+        end
+        DeleteEntity = function(h) delCalls = delCalls + 1 end
+        GetVehicleNumberPlateText = function(h) return 'FZA90' end
+
+        local jet = T.SpawnJet(90, 'TESTE')
+        check(jet ~= nil, 'spawnJet falhou no harness')
+        check(netCalls == 0, 'NETWORK_GET_NETWORK_ID_FROM_ENTITY chamada no spawn')
+        check(delCalls == 0, 'DELETE_ENTITY chamado no spawn')
+        check(jet.pendingNetId == true, 'caça não ficou com netId pendente')
+        check(AeroEntity.IsSuppressed(6001) == true, 'handle cru não foi suprimido')
+
+        local handler = __net and __net['aero_pilot:server:jetNetIds']
+        check(type(handler) == 'function', 'handler de netIds não registrado')
+        source = 1
+        handler({ { slot = 90, netId = 9191, pedNetId = 9192 } })
+        check(jet.pendingNetId == false, 'netId informado pelo client não foi aceito')
+        check(jet.netId == 9191, 'netId não gravado na frota')
+        check(netCalls == 0, 'native de netId chamada mesmo após resolução no client')
+
+        T.DespawnJet(90)
+        check(delCalls >= 1, 'entidade validada por netId não foi removida')
+        check(netCalls == 0, 'native de netId chamada em algum ponto do fluxo')
+        for i = 1, #netTargets do
+            check(netTargets[i] ~= 6001 and netTargets[i] ~= 6002,
+                'native de netId recebeu handle cru de CreateVehicle')
+        end
+
+        CreateVehicle, CreatePed, DoesEntityExist = old.veh, old.ped, old.exists
+        NetworkGetNetworkIdFromEntity, NetworkGetEntityFromNetworkId = old.net, old.from
+        DeleteEntity, GetVehicleNumberPlateText = old.del, old.plate
+        source = nil
     end)
 
     local passed, failed = 0, 0

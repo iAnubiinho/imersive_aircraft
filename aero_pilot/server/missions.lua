@@ -65,10 +65,6 @@ local function entityFromNetId(netId)
     return AeroEntity.FromNetId(netId)
 end
 
-local function netIdOf(entity)
-    return AeroEntity.NetId(entity)
-end
-
 --- Um caça é utilizável se a entidade real (handle direto OU via netId) estiver viva.
 --- netId pendente NÃO é destruição: CREATE_VEHICLE pode ainda não ter registrado
 --- o ID no OneSync. Isto evita o ciclo delete -> respawn que gerava os erros.
@@ -79,29 +75,45 @@ local function jetUsable(jet)
     return false
 end
 
---- Resolve netIds que ainda não estavam registrados no tick da criação.
---- Nunca chama DeleteEntity em handle inválido.
-local function resolvePendingNetIds()
-    local graceSec = ((I.SpawnGraceMs or 8000) / 1000.0) + 4.0
+--- Pede aos clients que resolvam os netIds (VehToNet/PedToNet no CLIENT é
+--- confiável; no servidor, NETWORK_GET_NETWORK_ID_FROM_ENTITY gera o erro
+--- 0x9E35DAB6 enquanto a entidade não foi recebida por nenhum client).
+local lastNetIdRequestAt = 0
+
+local function requestJetNetIds(force)
+    local t = now()
+    if not force and t == lastNetIdRequestAt then return end
+    local slots = {}
     for slot, jet in pairs(fleet) do
         if jet.pendingNetId then
-            if jet.entity and AeroEntity.Exists(jet.entity) then
-                local id = AeroEntity.NetId(jet.entity)
-                if id then
-                    jet.netId = id
-                    jet.pendingNetId = false
-                    jet.confirmedValid = true
-                    orderRevision = orderRevision + 1
-                    debugLog('netId resolvido no tick seguinte: slot', slot, id)
-                end
-            end
-            if jet.pendingNetId and (now() - (jet.createdAt or now())) > graceSec then
-                debugLog('netId nunca registrado; descartando registro do slot', slot)
-                fleet[slot] = nil       -- NÃO deletar handle possivelmente morto
+            slots[#slots + 1] = { slot = slot, plate = jet.plate, callsign = jet.callsign }
+        end
+    end
+    if #slots == 0 then return end
+    lastNetIdRequestAt = t
+    TriggerClientEvent('aero_pilot:client:resolveJetNetIds', -1, { slots = slots })
+end
+
+--- NUNCA chama NetworkGetNetworkIdFromEntity nem DeleteEntity no servidor
+--- para entidades pendentes. Só reenvia o pedido e, expirado o prazo,
+--- descarta o registro (sem tocar no handle).
+local function resolvePendingNetIds()
+    local graceSec = ((I.SpawnGraceMs or 8000) / 1000.0) + 4.0
+    local any = false
+    for slot, jet in pairs(fleet) do
+        if jet.pendingNetId then
+            if (now() - (jet.createdAt or now())) > graceSec then
+                debugLog('netId não informado por nenhum client; descartando slot', slot)
+                AeroEntity.Forget(jet.entity)
+                AeroEntity.Forget(jet.pedEntity)
+                fleet[slot] = nil
                 spawnGuard[slot] = nil
+            else
+                any = true
             end
         end
     end
+    if any then requestJetNetIds(false) end
 end
 
 local function readVehicleRuntime(veh)
@@ -308,15 +320,19 @@ local function spawnJet(slot, reason)
         end
     end
 
-    -- NetId pode não estar registrado ainda: guarda o handle e resolve no tick seguinte.
-    local vehNet = AeroEntity.NetId(veh)
-    local pedNet = (ped ~= 0 and AeroEntity.Exists(ped)) and AeroEntity.NetId(ped) or nil
+    -- >>> NENHUM NetworkGetNetworkIdFromEntity AQUI <<<
+    -- O netId é resolvido pelo client-host e devolvido em
+    -- aero_pilot:server:jetNetIds. Chamar a native agora gera 0x9E35DAB6
+    -- mesmo com DoesEntityExist=true (bug do OneSync no servidor).
+    AeroEntity.Suppress(veh)
+    if ped ~= 0 then AeroEntity.Suppress(ped) end
 
+    -- Statebag é apenas identificador auxiliar (setter funciona no handle novo).
     local stateBag = AeroEntity.State(veh)
     if stateBag then
         pcall(function()
             stateBag:set('aeroMissionJet', {
-                slot = slot, netId = vehNet, pedNetId = pedNet,
+                slot = slot, netId = nil, pedNetId = nil,
                 callsign = callsign(slot), plate = jetPlate(slot),
                 createdAt = now(),
             }, true)
@@ -327,12 +343,12 @@ local function spawnJet(slot, reason)
         slot           = slot,
         callsign       = callsign(slot),
         plate          = jetPlate(slot),
-        netId          = vehNet,
-        pedNetId       = pedNet,
+        netId          = nil,
+        pedNetId       = nil,
         entity         = veh,
         pedEntity      = ped,
-        pendingNetId   = vehNet == nil,
-        confirmedValid = AeroEntity.Exists(veh),
+        pendingNetId   = true,
+        confirmedValid = false,
         alive          = true,
         available      = true,
         phase          = 'STORED',
@@ -346,32 +362,34 @@ local function spawnJet(slot, reason)
     }
     spawnGuard[slot] = nil
     lastDestroyedAt[slot] = nil
-    debugLog('caça criado slot', slot, 'netId', vehNet or 'PENDENTE', 'motivo', reason or 'novo')
+    requestJetNetIds(true)
+    debugLog('caça criado slot', slot, 'netId PENDENTE (client irá resolver)', 'motivo', reason or 'novo')
     return fleet[slot]
 end
 
 local function despawnJet(slot)
     local jet = fleet[slot]
     if not jet then return end
-    -- Idempotência ANTES de qualquer native: impede delete duplo no mesmo handle.
+    -- Idempotência ANTES de qualquer native: impede delete duplo.
     fleet[slot] = nil
     spawnGuard[slot] = nil
+    AeroEntity.Forget(jet.entity)
+    AeroEntity.Forget(jet.pedEntity)
 
-    local veh = 0
-    if jet.entity and AeroEntity.Exists(jet.entity) then
-        veh = jet.entity
-    elseif jet.netId then
-        veh = AeroEntity.FromNetId(jet.netId)
+    -- Sem netId confirmado NUNCA chamar DELETE_ENTITY: o handle cru de
+    -- CreateVehicle é justamente o que produz 0xFAA3D236.
+    if not jet.netId then
+        debugLog('despawn sem netId: registro descartado sem DELETE_ENTITY, slot', slot)
+        return
     end
+
+    -- FromNetId valida o handle antes do delete (AeroEntity.Delete exige isso).
+    local veh = AeroEntity.FromNetId(jet.netId)
     if veh ~= 0 then AeroEntity.Delete(veh) end
-
-    local ped = 0
-    if jet.pedEntity and AeroEntity.Exists(jet.pedEntity) then
-        ped = jet.pedEntity
-    elseif jet.pedNetId then
-        ped = AeroEntity.FromNetId(jet.pedNetId)
+    if jet.pedNetId then
+        local ped = AeroEntity.FromNetId(jet.pedNetId)
+        if ped ~= 0 then AeroEntity.Delete(ped) end
     end
-    if ped ~= 0 then AeroEntity.Delete(ped) end
 end
 
 local function despawnAllFleet()
@@ -549,7 +567,8 @@ local function buildOrder()
     for slot, jet in pairs(fleet) do
         order.jets[#order.jets + 1] = {
             slot = slot, netId = jet.netId, pedNetId = jet.pedNetId,
-            callsign = jet.callsign, phase = jet.phase, pending = jet.pendingNetId == true,
+            callsign = jet.callsign, plate = jet.plate,
+            phase = jet.phase, pending = jet.pendingNetId == true,
         }
     end
     if m then
@@ -1175,20 +1194,17 @@ local function checkJetsAlive(m)
         -- Dentro da janela de registro/streaming, ausência NÃO é destruição.
         local graceExpired = (now() - (jet.createdAt or now())) >= graceSec
         if jet.alive and graceExpired then
-            local veh = 0
-            if jet.entity and AeroEntity.Exists(jet.entity) then
-                veh = jet.entity
-            elseif jet.netId then
-                veh = AeroEntity.FromNetId(jet.netId)
-            end
-
-            if veh == 0 then
-                -- Só declara destruição se a entidade já foi confirmada viva antes.
-                if jet.confirmedValid then markJetDestroyed(slot, 'SISTEMA') end
-            else
-                jet.confirmedValid = true
-                local health = tonumber(AeroEntity.Read(veh, GetEntityHealth, 1000)) or 1000
-                if health <= 0 then markJetDestroyed(slot, 'SISTEMA') end
+            -- Só entidades COM netId confirmado podem ser avaliadas.
+            -- Pendente = nascendo no OneSync, nunca "destruído".
+            if jet.netId then
+                local veh = AeroEntity.FromNetId(jet.netId)
+                if veh == 0 then
+                    if jet.confirmedValid then markJetDestroyed(slot, 'SISTEMA') end
+                else
+                    jet.confirmedValid = true
+                    local health = tonumber(AeroEntity.Read(veh, GetEntityHealth, 1000)) or 1000
+                    if health <= 0 then markJetDestroyed(slot, 'SISTEMA') end
+                end
             end
         end
     end
@@ -1684,6 +1700,64 @@ RegisterNetEvent('aero_pilot:server:missionCommand', function(data)
     end
 end)
 
+-- O CLIENT resolve netId com VehToNet/PedToNet (natives confiáveis no client).
+-- O servidor valida a existência e a placa antes de aceitar, e NUNCA chama
+-- NetworkGetNetworkIdFromEntity com o handle cru.
+RegisterNetEvent('aero_pilot:server:jetNetIds', function(list)
+    if type(list) ~= 'table' then return end
+    local changed = false
+    for i = 1, #list do
+        local d = list[i]
+        if type(d) == 'table' then
+            local slot = tonumber(d.slot)
+            local netId = tonumber(d.netId)
+            local jet = slot and fleet[slot]
+            if jet and jet.pendingNetId and netId and netId > 0 then
+                local veh = AeroEntity.FromNetId(netId)
+                if veh ~= 0 then
+                    local plate = AeroEntity.Read(veh, GetVehicleNumberPlateText, nil)
+                    local wanted = tostring(jet.plate or ''):gsub('%s+', ''):upper()
+                    local got = plate and tostring(plate):gsub('%s+', ''):upper() or nil
+                    -- Aceita se a placa bater, se a native não estiver disponível
+                    -- ou se o handle resolvido for exatamente o do CreateVehicle.
+                    -- Placa divergente sozinha não bloqueia (o setter pode ainda
+                    -- não ter sido replicado), mas é registrada no debug.
+                    local handleMatches = (jet.entity ~= nil and veh == jet.entity)
+                    if got == nil or got == wanted or handleMatches then
+                        if got ~= nil and got ~= wanted then
+                            debugLog('placa ainda não replicada, aceito pelo handle: slot', slot)
+                        end
+                        jet.netId = netId
+                        jet.pedNetId = tonumber(d.pedNetId)
+                        jet.entity = veh
+                        jet.pendingNetId = false
+                        jet.confirmedValid = true
+                        AeroEntity.RememberNetId(veh, netId)
+                        if jet.entity ~= 0 then
+                            local stateBag = AeroEntity.State(jet.entity)
+                            if stateBag then
+                                pcall(function()
+                                    stateBag:set('aeroMissionJet', {
+                                        slot = slot, netId = netId, pedNetId = jet.pedNetId,
+                                        callsign = jet.callsign, plate = jet.plate,
+                                        createdAt = jet.createdAt,
+                                    }, true)
+                                end)
+                            end
+                        end
+                        orderRevision = orderRevision + 1
+                        changed = true
+                        debugLog('netId resolvido pelo client: slot', slot, netId)
+                    else
+                        debugLog('netId recusado (placa divergente): slot', slot, netId)
+                    end
+                end
+            end
+        end
+    end
+    if changed then pushOrders('netids_resolvidos') end
+end)
+
 RegisterNetEvent('aero_pilot:server:aiReport', function(report)
     local src = source
     if src ~= aiHost or type(report) ~= 'table' then return end  -- segurança de ownership
@@ -1887,5 +1961,6 @@ AeroMissions.Test = {
     JetUsable            = jetUsable,
     CanDeclareDestroyed  = canDeclareDestroyed,
     DespawnJet           = despawnJet,
+    SpawnJet             = spawnJet,
     ResolvePendingNetIds = resolvePendingNetIds,
 }

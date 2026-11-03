@@ -80,7 +80,7 @@ na aba **MISSÕES**. A aba **HISTÓRICO** consulta/exclui registros.
 Polígono de 4 coordenadas + zonas circulares + limites de altitude, unidades de
 distância (NM/KM/MI/M) e bloqueio de transições de estado inválidas.
 
-### Regressões de entidade (41–44) — `Tried to access invalid entity`
+### Regressões de entidade (41–48) — `Tried to access invalid entity`
 
 | # | Cenário | Esperado |
 |---|---|---|
@@ -88,12 +88,15 @@ distância (NM/KM/MI/M) e bloqueio de transições de estado inválidas.
 | 42 | Caça com `netId` pendente, entidade viva | Considerado utilizável; **não** dispara substituição |
 | 43 | `JET_DESTROYED` vindo do host durante o streaming | Ignorado dentro de `SpawnGraceMs`; aceito depois se confirmado |
 | 44 | Dois `despawnJet` seguidos no mesmo slot | Uma única remoção; registro limpo da frota |
+| 45 | `despawnJet` de caça sem netId | **Zero** chamadas a `DELETE_ENTITY`; só descarta o registro |
+| 46 | Handle de caça pendente | `NETWORK_GET_NETWORK_ID_FROM_ENTITY` **nunca** é invocada; netId vem do client |
+| 47 | `DELETE_ENTITY` em handle cru com `DoesEntityExist=true` | Recusado; só handle validado por netId pode ser apagado |
+| 48 | Fluxo spawn → netId do client → despawn | **Zero** chamadas a `NETWORK_GET_NETWORK_ID_FROM_ENTITY` no servidor; `DELETE_ENTITY` só após validação |
 
 **Verificação in-game do bug original:** iniciar qualquer missão com
 `Config.Missions.Debug = true` e observar o console por ~30 s. Não devem aparecer
 `0x9E35DAB6` nem `0xFAA3D236`, os dois LAZER devem permanecer no ar (sem ciclo de
-delete/respawn) e o log deve mostrar `netId resolvido` quando o registro do OneSync
-atrasar. Repetir com `restart aero_pilot` durante a missão e com a saída do operador
+delete/respawn) e o log deve mostrar `netId resolvido pelo client` quando o registro do OneSync atrasar. Repetir com `restart aero_pilot` durante a missão e com a saída do operador
 que era host de IA.
 
 ---

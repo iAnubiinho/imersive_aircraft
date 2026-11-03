@@ -211,7 +211,9 @@ CreateThread(function()
 
                 if not ((driver and driver ~= 0) or engineOn or (st and st.batteryOn)) then return nil end
 
-                -- PONTO CRÍTICO: netId NUNCA é solicitado com handle morto.
+                -- PONTO CRÍTICO: netId NUNCA é solicitado com handle morto
+                -- nem com handle cru dos nossos caças (AeroEntity.NetId já
+                -- devolve o netId em cache ou nil, sem invocar a native).
                 if not AeroEntity.Exists(veh) then return nil end
                 local netId = AeroEntity.NetId(veh)
                 if not netId then return nil end

@@ -805,6 +805,79 @@ local function resetSession()
     reportAccum = 0
 end
 
+-- ---------------------------------------------------------------------------
+-- RESOLUÇÃO DE NETIDS NO CLIENT (alternativa estável à native no servidor)
+--
+-- NETWORK_GET_NETWORK_ID_FROM_ENTITY no SERVIDOR gera
+-- "Tried to access invalid entity" (0x9E35DAB6) mesmo com DoesEntityExist=true
+-- enquanto a entidade criada por CreateVehicle não foi recebida por um client.
+-- No CLIENT, VehToNet/PedToNet são confiáveis. O servidor pede, qualquer client
+-- que tenha o caça streamado responde, e o servidor valida antes de aceitar.
+-- ---------------------------------------------------------------------------
+local function normalizePlate(v)
+    return tostring(v or ''):gsub('%s+', ''):upper()
+end
+
+-- GetAllVehicles() é nativa EXCLUSIVA do servidor. No client usa-se
+-- GetGamePool('CVehicle'), que pertence ao API set "shared" do CFX.
+local function clientVehiclePool()
+    if type(GetGamePool) == 'function' then
+        local ok, list = pcall(GetGamePool, 'CVehicle')
+        if ok and type(list) == 'table' then return list end
+    end
+    if type(GetAllVehicles) == 'function' then
+        local ok2, list2 = pcall(GetAllVehicles)
+        if ok2 and type(list2) == 'table' then return list2 end
+    end
+    return {}
+end
+
+local function findMissionJet(plate, slot)
+    local wanted = normalizePlate(plate)
+    local list = clientVehiclePool()
+    for i = 1, #list do
+        local v = list[i]
+        if v and v ~= 0 and DoesEntityExist(v) then
+            local okPlate, p = pcall(GetVehicleNumberPlateText, v)
+            if okPlate and normalizePlate(p) == wanted and wanted ~= '' then
+                return v
+            end
+            local okBag, bag = pcall(function() return Entity(v).state.aeroMissionJet end)
+            if okBag and type(bag) == 'table' and tonumber(bag.slot) == tonumber(slot) then
+                return v
+            end
+        end
+    end
+    return 0
+end
+
+local function resolveJetNetIds(payload)
+    local slots = payload and payload.slots or nil
+    if type(slots) ~= 'table' then return end
+    local found = {}
+    for i = 1, #slots do
+        local d = slots[i]
+        if type(d) == 'table' then
+            local veh = findMissionJet(d.plate, d.slot)
+            if veh ~= 0 and DoesEntityExist(veh) then
+                local okVeh, netId = pcall(NetworkGetNetworkIdFromEntity, veh)
+                if okVeh and type(netId) == 'number' and netId > 0 then
+                    local pedNetId = nil
+                    local ped = GetPedInVehicleSeat(veh, -1)
+                    if ped and ped ~= 0 and DoesEntityExist(ped) then
+                        local okPed, pn = pcall(NetworkGetNetworkIdFromEntity, ped)
+                        if okPed and type(pn) == 'number' and pn > 0 then pedNetId = pn end
+                    end
+                    found[#found + 1] = { slot = d.slot, netId = netId, pedNetId = pedNetId }
+                end
+            end
+        end
+    end
+    if #found > 0 then TriggerServerEvent('aero_pilot:server:jetNetIds', found) end
+end
+
+RegisterNetEvent('aero_pilot:client:resolveJetNetIds', resolveJetNetIds)
+
 RegisterNetEvent('aero_pilot:client:aiHostAssign', function(newOrder, reason)
     if type(newOrder) ~= 'table' then return end
     sessionToken = sessionToken + 1
@@ -865,6 +938,7 @@ end)
 -- Compatibilidade com o harness / debug
 AeroMissionAI = {
     IsHost = function() return isHost end,
+    ResolveJetNetIds = resolveJetNetIds,
     GetJets = function() return jets end,
     GetVisualContact = function() return visualContact end,
     GetPhaseCount = function()
