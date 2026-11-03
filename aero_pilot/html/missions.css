@@ -1,0 +1,488 @@
+/* ============================================================================
+   AERO PILOT v3.0 — EXPANSÃO DE MISSÕES (FORTE ZANCUDO)
+   Usa as MESMAS variáveis visuais do design atual (obsidian / âmbar / radar green).
+   Nenhuma regra do style.css original é alterada.
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   RÓTULO COMPACTO DO RADAR DE BORDO (PLACA + DISTÂNCIA + ALTITUDE FT)
+   --------------------------------------------------------------------------- */
+.blip-info-tag {
+    position: absolute;
+    top: 26px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 7.5px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    color: #d9ffe7;
+    background: rgba(3, 14, 7, 0.82);
+    border: 1px solid rgba(56, 255, 122, 0.35);
+    border-radius: 3px;
+    padding: 1px 4px;
+    white-space: nowrap;
+    text-shadow: 0 1px 2px #000;
+    pointer-events: none;
+}
+
+.blip-alt-tag {
+    font-size: 7.5px;
+    color: #ffe9a8;
+}
+
+/* ---------------------------------------------------------------------------
+   ABAS DO TABLET ATC (TRÁFEGO / MISSÕES / HISTÓRICO)
+   --------------------------------------------------------------------------- */
+.atc-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.atc-tab {
+    position: relative;
+    background: rgba(11, 24, 15, 0.9);
+    border: 1px solid rgba(56, 255, 122, 0.22);
+    border-radius: 5px;
+    color: #8fbda0;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 6px 2px;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.atc-tab:hover { color: #e6fff0; border-color: rgba(56, 255, 122, 0.55); }
+
+.atc-tab.active {
+    background: rgba(56, 255, 122, 0.16);
+    border-color: var(--radar-green);
+    color: #eafff1;
+    box-shadow: inset 0 0 10px rgba(56, 255, 122, 0.12);
+}
+
+.tab-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 4px;
+    border-radius: 6px;
+    background: var(--amber);
+    color: #121510;
+    font-size: 8px;
+    font-weight: 900;
+}
+
+.atc-tab-view {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
+   PAINEL DE MISSÃO — UMA ÚNICA OPERAÇÃO COM SEUS DOIS CAÇAS
+   --------------------------------------------------------------------------- */
+.mission-summary,
+.mission-jets,
+.mission-fleet-extra,
+.mission-history-list {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.mission-summary::-webkit-scrollbar,
+.mission-jets::-webkit-scrollbar,
+.mission-history-list::-webkit-scrollbar { width: 4px; }
+.mission-summary::-webkit-scrollbar-thumb,
+.mission-jets::-webkit-scrollbar-thumb,
+.mission-history-list::-webkit-scrollbar-thumb { background: rgba(56, 255, 122, 0.25); border-radius: 4px; }
+
+.mission-section-title {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    color: #7ea38b;
+    flex-shrink: 0;
+}
+
+.mission-card {
+    background: rgba(11, 20, 14, 0.92);
+    border: 1px solid rgba(56, 255, 122, 0.3);
+    border-left: 3px solid var(--radar-green);
+    border-radius: 7px;
+    padding: 9px 10px;
+    font-family: var(--font-mono);
+    cursor: context-menu;
+}
+
+.mission-card.alerted { border-left-color: var(--amber); }
+.mission-card.danger  { border-left-color: var(--led-red); }
+
+.mission-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+}
+
+.mission-id {
+    font-size: 12px;
+    font-weight: 900;
+    color: #eafff1;
+    letter-spacing: 0.6px;
+}
+
+.mission-type {
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--amber-bright);
+}
+
+.mission-state-badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 8.5px;
+    font-weight: 900;
+    letter-spacing: 0.5px;
+    color: #dfffe9;
+    background: rgba(56, 255, 122, 0.14);
+    border: 1px solid rgba(56, 255, 122, 0.42);
+}
+
+.mission-state-badge.st-waiting,
+.mission-state-badge.st-idle { color: #ffe9a8; background: rgba(245, 158, 11, 0.14); border-color: rgba(245, 158, 11, 0.5); }
+.mission-state-badge.st-searching { color: #b8e6ff; background: rgba(56, 200, 255, 0.14); border-color: rgba(56, 200, 255, 0.5); }
+.mission-state-badge.st-attacking,
+.mission-state-badge.st-blocked { color: #ffc7c7; background: rgba(255, 74, 74, 0.16); border-color: rgba(255, 74, 74, 0.55); }
+.mission-state-badge.st-returning,
+.mission-state-badge.st-landing,
+.mission-state-badge.st-taxiing { color: #d6d6ff; background: rgba(140, 140, 255, 0.14); border-color: rgba(140, 140, 255, 0.45); }
+
+.mission-timer {
+    margin-top: 7px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 9px;
+    color: #ffd98a;
+    font-weight: 800;
+}
+
+.mission-timer b { font-size: 14px; color: var(--amber-bright); letter-spacing: 1px; }
+
+.mission-grid {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 8px;
+}
+
+.mission-field {
+    font-size: 8.5px;
+    color: #9ec0aa;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.mission-field b { color: #e8fff0; font-weight: 800; }
+.mission-field.full { grid-column: 1 / -1; }
+
+.mission-flags {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.mission-flag {
+    font-size: 8px;
+    font-weight: 900;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #a8bdb0;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.mission-flag.ok { color: #b6ffcf; border-color: rgba(56, 255, 122, 0.5); background: rgba(56, 255, 122, 0.12); }
+.mission-flag.bad { color: #ffb3b3; border-color: rgba(255, 80, 80, 0.5); background: rgba(255, 80, 80, 0.12); }
+.mission-flag.warn { color: #ffe1a0; border-color: rgba(245, 158, 11, 0.5); background: rgba(245, 158, 11, 0.12); }
+.mission-flag.info { color: #b8e6ff; border-color: rgba(56, 200, 255, 0.45); background: rgba(56, 200, 255, 0.10); }
+
+.mission-jets { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+
+.jet-chip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    background: rgba(15, 32, 20, 0.8);
+    border: 1px solid rgba(56, 255, 122, 0.25);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: #e6fff0;
+    cursor: context-menu;
+}
+
+.jet-chip.dead { border-color: rgba(255, 80, 80, 0.5); color: #ffb3b3; opacity: 0.75; }
+.jet-chip .jet-name { font-weight: 900; }
+.jet-chip .jet-phase { font-size: 8px; color: #9ec0aa; }
+.jet-chip .jet-dist { font-size: 8.5px; color: var(--amber-bright); }
+
+.mission-fleet-extra {
+    flex-shrink: 0;
+    max-height: 110px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    color: #9ec0aa;
+}
+
+.mission-empty {
+    margin: auto 0;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: #5b7865;
+    line-height: 1.7;
+}
+
+/* ---------------------------------------------------------------------------
+   HISTÓRICO
+   --------------------------------------------------------------------------- */
+.mission-history-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: #8fbda0;
+    flex-shrink: 0;
+}
+
+.mission-mini-btn {
+    background: rgba(24, 30, 40, 0.95);
+    border: 1px solid rgba(56, 255, 122, 0.35);
+    color: #dfffe9;
+    border-radius: 4px;
+    padding: 4px 7px;
+    font-family: var(--font-mono);
+    font-size: 8.5px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.mission-mini-btn:hover { border-color: var(--radar-green); }
+.mission-mini-btn.danger { border-color: rgba(255, 80, 80, 0.6); color: #ffc7c7; }
+.mission-mini-btn.restricted { opacity: 0.55; }
+
+.mission-history-list { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+.history-card {
+    background: rgba(11, 20, 14, 0.9);
+    border: 1px solid rgba(56, 255, 122, 0.22);
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-family: var(--font-mono);
+}
+
+.history-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 5px;
+    font-size: 9.5px;
+    font-weight: 900;
+    color: #e8fff0;
+}
+
+.history-meta { font-size: 8px; color: #8fbda0; margin-top: 3px; }
+.history-events {
+    margin-top: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    border-top: 1px dashed rgba(255, 255, 255, 0.1);
+    padding-top: 5px;
+}
+.history-event {
+    font-size: 8.5px;
+    color: #b8d3c2;
+    line-height: 1.45;
+    display: flex;
+    gap: 5px;
+}
+.history-event .ev-time { color: var(--amber-bright); flex-shrink: 0; }
+.history-event .ev-actor { color: #7ea38b; }
+.history-actions { margin-top: 6px; display: flex; justify-content: flex-end; gap: 5px; }
+
+/* ---------------------------------------------------------------------------
+   MENU CONTEXTUAL (BOTÃO DIREITO)
+   --------------------------------------------------------------------------- */
+.aero-context-menu {
+    position: fixed;
+    z-index: 12000;
+    min-width: 245px;
+    max-width: 320px;
+    background: rgba(10, 14, 20, 0.98);
+    border: 1px solid rgba(56, 255, 122, 0.42);
+    border-radius: 7px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8);
+    padding: 5px;
+    font-family: var(--font-mono);
+}
+
+.ctx-header {
+    padding: 5px 7px 6px;
+    font-size: 8.5px;
+    font-weight: 900;
+    letter-spacing: 0.6px;
+    color: var(--amber-bright);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+    margin-bottom: 4px;
+    overflow-wrap: anywhere;
+}
+
+.ctx-sub {
+    padding: 4px 7px 3px;
+    font-size: 8px;
+    color: #7ea38b;
+    font-weight: 800;
+}
+
+.ctx-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #e6fff0;
+    cursor: pointer;
+}
+.ctx-item:hover { background: rgba(56, 255, 122, 0.14); }
+.ctx-item.danger { color: #ffc0c0; }
+.ctx-item.danger:hover { background: rgba(255, 74, 74, 0.16); }
+.ctx-item.disabled {
+    color: #4f6156;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.ctx-item.disabled:hover { background: transparent; }
+.ctx-item .ctx-hint { font-size: 7.5px; color: #7ea38b; }
+.ctx-sep { height: 1px; background: rgba(255, 255, 255, 0.08); margin: 4px 2px; }
+
+/* ---------------------------------------------------------------------------
+   CONFIRMAÇÃO DE EXCLUSÃO
+   --------------------------------------------------------------------------- */
+.aero-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+    background: rgba(2, 5, 8, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.aero-confirm-box {
+    width: min(420px, 90vw);
+    background: linear-gradient(180deg, #171d26, #0b0e14);
+    border: 2px solid rgba(255, 90, 90, 0.55);
+    border-radius: 10px;
+    padding: 16px;
+    font-family: var(--font-mono);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+}
+
+.aero-confirm-title { font-size: 12px; font-weight: 900; color: #ffc0c0; letter-spacing: 0.6px; }
+.aero-confirm-text { margin-top: 10px; font-size: 10px; color: #dbe7df; line-height: 1.6; }
+.aero-confirm-note { margin-top: 10px; font-size: 8.5px; color: var(--amber-bright); line-height: 1.5; }
+.aero-confirm-actions { margin-top: 14px; display: flex; justify-content: flex-end; gap: 7px; }
+
+/* ---------------------------------------------------------------------------
+   TOAST DE AVISOS DO OPERADOR
+   --------------------------------------------------------------------------- */
+.mission-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 7%;
+    transform: translateX(-50%);
+    z-index: 12500;
+    max-width: 60vw;
+    padding: 9px 16px;
+    border-radius: 6px;
+    background: rgba(10, 16, 12, 0.96);
+    border: 1px solid rgba(56, 255, 122, 0.5);
+    color: #e6fff0;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+.mission-toast.warn  { border-color: rgba(245, 158, 11, 0.7); color: #ffe1a0; }
+.mission-toast.error { border-color: rgba(255, 80, 80, 0.7); color: #ffc0c0; }
+
+/* ---------------------------------------------------------------------------
+   ALERTA AO PILOTO INTERCEPTADO — AMARELO PISCANDO
+   --------------------------------------------------------------------------- */
+.mission-alert {
+    position: fixed;
+    top: 16%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 11000;
+    text-align: center;
+    pointer-events: none;
+    animation: missionAlertBlink 0.65s steps(1, end) infinite;
+}
+
+@keyframes missionAlertBlink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0.18; }
+}
+
+.mission-alert-frame {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 14px 30px;
+    background: rgba(20, 16, 2, 0.88);
+    border: 3px solid #ffd633;
+    border-radius: 8px;
+    box-shadow: 0 0 32px rgba(255, 214, 51, 0.6), inset 0 0 22px rgba(255, 214, 51, 0.16);
+    font-family: var(--font-mono);
+    font-size: 21px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    color: #ffd633;
+    text-shadow: 0 0 14px rgba(255, 214, 51, 0.8);
+    white-space: nowrap;
+}
+
+.mission-alert-icon { font-size: 20px; }
+.mission-alert-sub {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #ffe98a;
+}

@@ -72,6 +72,10 @@ Config.Radar = {
     MaxRangeMeters = 2200.0,
     TrafficSyncIntervalMs = 1000,
 
+    -- Unidade de distância usada nos rótulos dos alvos identificados do radar de bordo.
+    -- Aceitos: 'NM' (milhas náuticas), 'KM', 'MI' (milhas terrestres), 'M' (metros).
+    DistanceUnit = 'NM',
+
     WeatherHashes = {
         Snow = { `XMAS`, `BLIZZARD`, `SNOW`, `SNOWLIGHT` },
         Rain = { `RAIN`, `THUNDER`, `CLEARING` },
@@ -224,3 +228,297 @@ Config.BlacklistedModels = {
 
 Config.ForcePlaneModels = {}
 Config.ForceHeliModels = {}
+
+-- ============================================================================
+-- EXPANSÃO v3.0 — SISTEMA DE MISSÕES DO FORTE ZANCUDO
+-- TODAS as configurações das novas funcionalidades ficam AQUI.
+-- Coordenadas: calibradas a partir de referências públicas do GTA V
+-- (pista 30 do Fort Zancudo: -2414.65, 3093.50 / proa 300°; LSIA 12R/30L:
+-- -1333.61, -3145.17). Ajuste no seu servidor se usar YMAPs customizados.
+-- ============================================================================
+Config.Missions = {
+    Enabled              = true,
+    Debug                = false,
+    MaxSimultaneousMissions = 1,   -- apenas UMA missão operacional por vez
+
+    -- Liga/desliga funcionalidades sem precisar mexer no código
+    Features = {
+        ForceIdentification = true,
+        ForceLanding        = true,
+        ProtectedZones      = true,
+        VisualSearch        = true,
+        ManualEngage        = true,
+        AttackOnDeadline    = true,
+        IdleReturn          = true,
+        History             = true,
+        PilotAlerts         = true,
+    },
+
+    -- ------------------------------------------------------------------------
+    -- AERONAVES MILITARES
+    -- ------------------------------------------------------------------------
+    Aircraft = {
+        Model              = `lazer`,          -- P-996 LAZER
+        Count              = 2,               -- quantidade inicial de caças
+        Callsigns          = { 'LASER 01', 'LASER 02' },
+        PilotModel         = `s_m_m_pilot_02`, -- macacão de voo + capacete (piloto militar)
+        PilotFallbackModel = `s_m_m_marine_01`,
+        PlatePrefix        = 'FZA',           -- matrícula dos caças (FZA01, FZA02...)
+
+        -- Roupa/equipamento do piloto NPC (variações nativas de ped)
+        PilotOutfit = {
+            Components = {
+                { id = 0, drawable = 0, texture = 0 },  -- cabeça
+                { id = 3, drawable = 0, texture = 0 },  -- tronco / macacão
+                { id = 4, drawable = 0, texture = 0 },  -- pernas
+                { id = 8, drawable = 0, texture = 0 },  -- acessórios
+                { id = 11, drawable = 0, texture = 0 }, -- casaco
+            },
+            Props = {
+                { id = 0, drawable = 0, texture = 0 },  -- capacete de voo
+            },
+            GiveHelmet = true,
+            HelmetPropIndex = 0,
+            BlockPermanentEvents = true,
+        },
+
+        ApproachDistanceMeters = 180.0,   -- distância para "chegar perto" / contato visual
+        EscortDistanceMeters   = 95.0,    -- distância de escolta lateral
+        VisualRangeMeters      = 650.0,   -- alcance de percepção visual dos caças
+        VisualLosRequired      = true,    -- exige linha de visão desobstruída
+        VisualGraceSeconds     = 4,       -- tolerância antes de declarar perda de contato
+
+        InterceptAltitudeMeters = 220.0,  -- altitude de interceptação (ASL)
+        ClimbAltitudeMeters     = 320.0,  -- altitude de subida após decolagem
+        TerrainSafetyMargin     = 70.0,
+        MinAltitudeAGL          = 45.0,
+
+        TransitSpeedMs  = 105.0,  -- ~204 KTS
+        EscortSpeedMs   = 78.0,   -- ~152 KTS
+        AttackSpeedMs   = 120.0,
+        TaxiSpeedMs     = 9.0,
+        LandingSpeedMs  = 48.0,
+        GoalRetaskDelta = 45.0,   -- só reemite task se o alvo se mover mais que isto
+
+        Formation = {
+            LateralMeters      = 110.0,  -- separação lateral entre os dois caças
+            TrailMeters        = 140.0,  -- recuo em relação ao alvo
+            AltitudeStepMeters = 18.0,   -- degrau de altitude do wingman
+            LeadOffsetMeters   = 35.0,   -- avanço do líder
+            Pattern            = 'INTERCEPT_WEDGE', -- 'INTERCEPT_WEDGE' | 'LINE_ABREAST'
+        },
+    },
+
+    -- ------------------------------------------------------------------------
+    -- BASE MILITAR (FORTE ZANCUDO)
+    -- ------------------------------------------------------------------------
+    Base = {
+        Spawn = {                    -- ponto de criação (pátio / hangar)
+            { x = -2245.0, y = 3162.0, z = 32.7, h = 60.0 },
+            { x = -2255.0, y = 3150.0, z = 32.7, h = 60.0 },
+        },
+        Alignment  = vector4(-2440.0, 3050.0, 32.7, 60.0), -- alinhamento na cabeceira
+        Runway     = {
+            Start   = vector3(-2620.0, 2960.0, 32.7),
+            End     = vector3(-2180.0, 3250.0, 32.7),
+            Center  = vector3(-2414.65, 3093.50, 32.7),
+            Heading = 60.0,          -- heading GTA (proa 300°)
+            LengthM = 500.0,
+        },
+        TaxiRoute = {               -- pontos de taxiamento hangar -> pista
+            vector3(-2270.0, 3155.0, 32.7),
+            vector3(-2340.0, 3090.0, 32.7),
+            vector3(-2400.0, 3030.0, 32.7),
+            vector3(-2440.0, 3050.0, 32.7),
+        },
+        TaxiRouteReturn = {         -- pista -> hangar
+            vector3(-2400.0, 3030.0, 32.7),
+            vector3(-2340.0, 3090.0, 32.7),
+            vector3(-2270.0, 3155.0, 32.7),
+        },
+        ApproachPoints = {          -- aproximação antes do pouso
+            vector3(-2800.0, 2800.0, 190.0),
+            vector3(-2650.0, 2920.0, 110.0),
+            vector3(-2550.0, 2980.0,  65.0),
+        },
+        Landing        = { Start = vector3(-2620.0, 2960.0, 32.7), End = vector3(-2180.0, 3250.0, 32.7) },
+        Hangar         = vector3(-2245.0, 3162.0, 32.7),
+        Parking        = {
+            { x = -2245.0, y = 3162.0, z = 32.7, h = 60.0 },
+            { x = -2255.0, y = 3150.0, z = 32.7, h = 60.0 },
+        },
+        EgressDistanceMeters = 12.0,
+        DespawnDelayMs       = 2500,
+    },
+
+    -- ------------------------------------------------------------------------
+    -- AEROPORTOS (destinos de pouso forçado)
+    -- ------------------------------------------------------------------------
+    Airports = {
+        ZANCUDO = {
+            id     = 'ZANCUDO',
+            label  = 'FORTE ZANCUDO',
+            coords = vector3(-2414.65, 3093.50, 32.7),
+            ConfirmRadiusMeters = 420.0,   -- raio para considerar "pousou no destino"
+            Runway = { Start = vector3(-2620.0, 2960.0, 32.7), End = vector3(-2180.0, 3250.0, 32.7) },
+        },
+        LSIA = {
+            id     = 'LSIA',
+            label  = 'AEROPORTO INTERNACIONAL DE LOS SANTOS',
+            coords = vector3(-1333.61, -3145.17, 15.0),
+            ConfirmRadiusMeters = 620.0,
+            Runway = { Start = vector3(-1600.0, -3350.0, 15.0), End = vector3(-1080.0, -2920.0, 15.0) },
+        },
+    },
+
+    -- Critérios de confirmação de pouso (NÃO é simples contato com o solo)
+    LandingCheck = {
+        MaxSpeedMps          = 3.0,   -- parado / taxiando muito lento
+        MaxVelocityMps       = 1.2,   -- efetivamente parado
+        MaxHeightAboveGround = 2.5,
+        StableSeconds        = 3,     -- precisa ficar estável por 3s
+        RequireEngineOff     = true,
+        RequireEmptyOnAbandon = true,
+        RecheckMs            = 1000,
+    },
+
+    -- ------------------------------------------------------------------------
+    -- MISSÕES / CRONÔMETROS (segundos) — centralizados no gerenciador
+    -- ------------------------------------------------------------------------
+    Timings = {
+        IdentificationSeconds  = 600,  -- 10 minutos
+        LandingSeconds         = 600,  -- 10 minutos
+        IdleSeconds            = 300,  -- 5 minutos de inatividade do operador
+        SearchSeconds          = 300,  -- 5 minutos de busca
+        PostIdentifyHoldSeconds = 10, -- 10s de contato visual após identificar
+        LastKnownDisplaySeconds = 120, -- 1 a 2 minutos no radar
+        AttackMaxSeconds       = 180,  -- evita ataques infinitamente ineficientes
+        AttackNoProgressSeconds = 60,  -- sem dano ao alvo -> reavalia
+        SpawnTimeoutMs         = 8000,
+        MissionSeqStart        = 1,
+    },
+
+    Intervals = {
+        ServerTickMs          = 500,   -- máquina de estados / zonas / cronômetros
+        AiTickMs              = 500,   -- loop do client-host de IA (não é por frame)
+        MissionFeedMs         = 1000,  -- atualizações para a NUI
+        PerceptionMs          = 1000,  -- percepção visual
+        RadarSnapshotMs       = 1000,  -- igual ao TrafficSyncIntervalMs existente
+        HistorySaveDebounceMs = 1500,
+        AlertBeepMs           = 2600,
+        AiReportMs            = 1000,
+    },
+
+    -- ------------------------------------------------------------------------
+    -- BUSCA AÉREA
+    -- ------------------------------------------------------------------------
+    Search = {
+        Pattern           = 'EXPANDING_SQUARE', -- 'EXPANDING_SQUARE' | 'ORBIT'
+        RadiusMeters      = 900.0,
+        ExpandStepMeters  = 260.0,
+        AltitudeMeters    = 260.0,
+        LegSeconds        = 22,
+        OrbitRadiusMeters = 480.0,
+        OrbitPoints       = 8,
+        SpeedMs           = 85.0,
+    },
+
+    -- ------------------------------------------------------------------------
+    -- ZONAS PROTEGIDAS — NENHUM armamento ofensivo dentro delas
+    -- shape = 'polygon' (4+ coordenadas: tudo que estiver no centro é protegido)
+    -- shape = 'circle'  (coords + radiusM)
+    -- minAltitude/maxAltitude são OPCIONAIS (nil = qualquer altitude)
+    -- Para adicionar novas áreas, copie um dos blocos abaixo.
+    -- ------------------------------------------------------------------------
+    ProtectedZones = {
+        {
+            name    = 'LOS SANTOS (INCLUI LSIA)',
+            enabled = true,
+            shape   = 'polygon',
+            -- 4 cantos: tudo dentro deste quadrilátero é área protegida
+            points  = {
+                vector2(-1800.0, -3400.0), -- SW (inclui a cabeceira sul do LSIA)
+                vector2(  950.0, -3400.0), -- SE
+                vector2(  950.0,  -150.0), -- NE
+                vector2(-1800.0,  -150.0), -- NW
+            },
+            minAltitude = nil,
+            maxAltitude = nil,
+        },
+
+        -- EXEMPLO PRONTO PARA NOVAS ÁREAS (descomente e ajuste):
+        -- {
+        --     name = 'MINHA ZONA CIRCULAR',
+        --     enabled = true,
+        --     shape = 'circle',
+        --     coords = vector3(0.0, 0.0, 0.0),
+        --     radiusM = 1200.0,
+        --     minAltitude = 0.0,
+        --     maxAltitude = 900.0,
+        -- },
+        -- {
+        --     name = 'OUTRA ZONA DE 4 COORDENADAS',
+        --     enabled = true,
+        --     shape = 'polygon',
+        --     points = {
+        --         vector2(1000.0, 1000.0),
+        --         vector2(2000.0, 1000.0),
+        --         vector2(2000.0, 2000.0),
+        --         vector2(1000.0, 2000.0),
+        --     },
+        -- },
+    },
+
+    -- ------------------------------------------------------------------------
+    -- ALERTAS AO PILOTO INTERCEPTADO (amarelo, piscando, som nativo)
+    -- ------------------------------------------------------------------------
+    Alerts = {
+        Text = {
+            Identification = 'IDENTIFIQUE-SE IMEDIATAMENTE',
+            LandingZancudo = 'POUSE NO FORTE ZANCUDO IMEDIATAMENTE',
+            LandingLsia    = 'POUSE NO AEROPORTO INTERNACIONAL DE LOS SANTOS IMEDIATAMENTE',
+        },
+        Color      = { r = 255, g = 214, b = 51 },
+        BlinkMs    = 650,
+        -- Som NATIVO do GTA V. O default usa o soundset mais confiável do jogo;
+        -- troque por 'Beep_Red' / 'DLC_HEIST_HACKING_SNAKE_SOUNDS' se preferir.
+        Sound      = {
+            Name          = 'ERROR',
+            Set           = 'HUD_FRONTEND_DEFAULT_SOUNDSET',
+            FallbackName  = 'Beep_Red',
+            FallbackSet   = 'DLC_HEIST_HACKING_SNAKE_SOUNDS',
+            Repeat        = true,
+        },
+    },
+
+    -- ------------------------------------------------------------------------
+    -- ARMAMENTOS REAIS DO GTA V (sem destruição artificial)
+    -- ------------------------------------------------------------------------
+    Weapons = {
+        RocketHash       = `VEHICLE_WEAPON_PLANE_ROCKET`,
+        CannonHash       = `VEHICLE_WEAPON_PLAYER_LAZER`,
+        CannonBurstMs    = 900,
+        RocketCooldownMs = 6500,
+        MaxFiringRangeM  = 900.0,
+        PilotAccuracy    = 85,        -- habilidade de pilotos treinados (0..100)
+        AllowEvasion     = true,      -- o alvo pode desviar / errar disparos
+        ZoneCheckSamples = 6,         -- amostras ao longo da linha de tiro
+    },
+
+    -- ------------------------------------------------------------------------
+    -- HISTÓRICO / PERSISTÊNCIA
+    -- Backend inicial: JSON (sem dependências). Trocar por 'oxmysql' depois é
+    -- possível sem mexer na máquina de estados (adaptador em server/history.lua).
+    -- ------------------------------------------------------------------------
+    History = {
+        Backend               = 'json',
+        File                  = 'data/mission_history.json',
+        AdminLogFile          = 'data/admin_log.json',
+        AdminAces             = { 'aero_pilot.admin', 'admin' }, -- IsPlayerAceAllowed
+        RequireConfirmation   = true,
+        ConfirmationTtlSeconds = 60,
+        RetentionDays         = 0,   -- 0 = sem retenção por idade
+        MaxRecords            = 0,   -- 0 = sem limite
+        ShowDeleteButtonForAll = true, -- servidor SEMPRE revalida (item 15.2)
+    },
+}

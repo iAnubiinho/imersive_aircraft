@@ -98,7 +98,8 @@ CreateThread(function()
                         radarEnabled = (Config.Radar and Config.Radar.Enabled) ~= false,
                         units = Config.Units,
                         keys = Config.Keys,
-                        hudCustom = Config.HudCustomization
+                        hudCustom = Config.HudCustomization,
+                        distanceUnit = (Config.Radar and Config.Radar.DistanceUnit) or 'NM'
                     })
                 end
 

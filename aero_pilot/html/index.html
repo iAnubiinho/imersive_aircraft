@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Aero Pilot — Cockpit, Painel Luminoso & Controlador ATC</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="missions.css" />
 </head>
 <body>
     <!-- Barra exclusiva de simulação quando aberto fora do FiveM (Preview no navegador) -->
@@ -18,10 +19,22 @@
         <button id="sim-btn-reset" class="sim-btn">↺ Cold & Dark</button>
         <span class="sim-sep">|</span>
         <button id="sim-btn-atc-tablet" class="sim-btn atc-highlight">📟 Tablet Controlador (Mapa Completo)</button>
+        <button id="sim-btn-missions" class="sim-btn" title="Injetar dados de demonstração de missões/histórico">📋 Missões (demo)</button>
         <span class="sim-sep">|</span>
         <button id="sim-wx-rain" class="sim-btn">🌧</button>
         <button id="sim-wx-snow" class="sim-btn">❄</button>
         <button id="sim-wx-fog" class="sim-btn">🌫</button>
+    </div>
+
+
+    <!-- ALERTA AO PILOTO INTERCEPTADO (amarelo, piscando, som nativo) -->
+    <div id="aero-mission-alert" class="mission-alert hidden">
+        <div class="mission-alert-frame">
+            <span class="mission-alert-icon">⚠</span>
+            <span id="mission-alert-text">IDENTIFIQUE-SE IMEDIATAMENTE</span>
+            <span class="mission-alert-icon">⚠</span>
+        </div>
+        <div class="mission-alert-sub">COMANDO AÉREO DO FORTE ZANCUDO</div>
     </div>
 
     <div id="aero-hud" class="aero-hud hidden">
@@ -604,6 +617,13 @@
 
                 <!-- Coluna Direita: Lista de Contatos no Espaço Aéreo -->
                 <aside class="atc-sidebar">
+                    <div class="atc-tabs" id="atc-tabs">
+                        <button class="atc-tab active" data-tab="traffic">TRÁFEGO</button>
+                        <button class="atc-tab" data-tab="missions">MISSÕES<span id="atc-mission-badge" class="tab-badge hidden">1</span></button>
+                        <button class="atc-tab" data-tab="history">HISTÓRICO</button>
+                    </div>
+
+                    <div id="atc-traffic-view" class="atc-tab-view">
                     <div class="atc-stats-grid">
                         <div class="atc-stat-card green">
                             <span class="stat-num" id="atc-cnt-id">0</span>
@@ -624,11 +644,46 @@
                     <div id="atc-contacts-list" class="atc-contacts-list">
                         <div class="atc-empty-msg">Nenhuma aeronave detectada no espaço aéreo.</div>
                     </div>
+                    </div><!-- /atc-traffic-view -->
+
+                    <div id="atc-missions-view" class="atc-tab-view hidden">
+                        <div id="mission-summary" class="mission-summary"></div>
+                        <div class="mission-section-title">CAÇAS ASSOCIADOS (COMANDOS NO BOTÃO DIREITO)</div>
+                        <div id="mission-jets" class="mission-jets"></div>
+                        <div id="mission-fleet-extra" class="mission-fleet-extra"></div>
+                    </div>
+
+                    <div id="atc-history-view" class="atc-tab-view hidden">
+                        <div class="mission-history-toolbar">
+                            <span id="history-count">0 REGISTROS</span>
+                            <button id="btn-history-refresh" class="mission-mini-btn">↻ ATUALIZAR</button>
+                        </div>
+                        <div id="mission-history-list" class="mission-history-list"></div>
+                    </div>
                 </aside>
             </div>
         </div>
     </div>
 
+
+    <!-- MENU CONTEXTUAL (BOTÃO DIREITO) E CONFIRMAÇÃO DE EXCLUSÃO -->
+    <div id="aero-context-menu" class="aero-context-menu hidden"></div>
+
+    <div id="aero-confirm-overlay" class="aero-confirm-overlay hidden">
+        <div class="aero-confirm-box">
+            <div class="aero-confirm-title">⚠ CONFIRMAR EXCLUSÃO DE HISTÓRICO</div>
+            <div id="aero-confirm-text" class="aero-confirm-text"></div>
+            <div class="aero-confirm-note">ESTA AÇÃO EXIGE PERMISSÃO ADMINISTRATIVA E SERÁ REGISTRADA EM LOG.</div>
+            <div class="aero-confirm-actions">
+                <button id="aero-confirm-cancel" class="mission-mini-btn">CANCELAR</button>
+                <button id="aero-confirm-ok" class="mission-mini-btn danger">EXCLUIR REGISTRO</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mission-toast" class="mission-toast hidden"></div>
+
     <script src="script.js"></script>
+    <script src="missions.js"></script>
 </body>
 </html>

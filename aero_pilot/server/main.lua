@@ -3,8 +3,21 @@
 -- ============================================================================
 
 local activePilots = {}
-local activeControllers = {}
+-- Exposto ao gerenciador de missões (mesma tabela, sem alterar o mecanismo de abertura)
+AeroActiveControllers = {}
+local activeControllers = AeroActiveControllers
+-- Snapshot do radar publicado para o gerenciador de missões (fonte de detecção)
+AeroRadarSnapshot = {}
 local QBCore = nil
+
+-- Alguns artifacts não expõem todas as natives de entidade no servidor;
+-- o radar original continua intacto mesmo que uma delas falte.
+local function missionSafeNative(fn, ...)
+    if type(fn) ~= 'function' then return nil end
+    local ok, value = pcall(fn, ...)
+    if ok then return value end
+    return nil
+end
 
 local function getQBCore()
     if QBCore then return QBCore end
@@ -65,6 +78,7 @@ local function hasStationPermission(src, station)
     end
     return false
 end
+AeroStationPermission = hasStationPermission
 
 RegisterNetEvent('aero_pilot:server:setPilotActive', function(isActive)
     local src = source
@@ -210,6 +224,11 @@ CreateThread(function()
                                 hdg = hdg,
                                 radarOn = radarSwitchOn,
                                 engineOn = engineOn,
+                                -- Campos adicionais para o gerenciador de missões
+                                occupant = (driver ~= nil and driver ~= 0),
+                                inAir = missionSafeNative(IsEntityInAir, veh) == true,
+                                heightAboveGround = missionSafeNative(GetEntityHeightAboveGround, veh) or 0.0,
+                                health = missionSafeNative(GetEntityHealth, veh) or 1000,
                             }
 
                             allAircraft[#allAircraft + 1] = entry
@@ -218,6 +237,7 @@ CreateThread(function()
                                 onboardTraffic[#onboardTraffic + 1] = {
                                     netId = netId,
                                     type = acftType,
+                                    plate = plate,
                                     x = entry.x,
                                     y = entry.y,
                                     z = entry.z,
@@ -229,6 +249,34 @@ CreateThread(function()
                     end
                 end
             end
+
+            -- Snapshot compartilhado com o gerenciador de missões:
+            -- DETECÇÃO PELO RADAR é distinta do CONTATO VISUAL dos caças (item 8).
+            local snapshot = {}
+            for i = 1, #allAircraft do
+                local ac = allAircraft[i]
+                snapshot[ac.netId] = {
+                    netId            = ac.netId,
+                    plate            = ac.plate,
+                    identified       = ac.radarOn == true,
+                    radarOn          = ac.radarOn,
+                    engineOn         = ac.engineOn,
+                    x = ac.x, y = ac.y, z = ac.z,
+                    hdg              = ac.hdg,
+                    speedMps         = ac.speedMps,
+                    type             = ac.type,
+                    occupant         = ac.occupant,
+                    inAir            = ac.inAir,
+                    heightAboveGround = ac.heightAboveGround,
+                    health           = ac.health,
+                    at               = os.time(),
+                }
+                if ac.plate and ac.plate ~= '' and ac.radarOn then
+                    snapshot.byPlate = snapshot.byPlate or {}
+                    snapshot.byPlate[ac.plate] = ac.netId
+                end
+            end
+            AeroRadarSnapshot = snapshot
 
             if hasPilots and Config.Radar and Config.Radar.Enabled then
                 for src, _ in pairs(activePilots) do
@@ -303,6 +351,8 @@ CreateThread(function()
                     TriggerClientEvent('aero_pilot:client:controllerFeed', src, atcContacts)
                 end
             end
+        else
+            AeroRadarSnapshot = {}
         end
     end
 end)
