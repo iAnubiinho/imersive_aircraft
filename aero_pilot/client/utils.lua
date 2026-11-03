@@ -228,13 +228,23 @@ function AeroUtils.BuildRadarData(myVeh, myCoords, myCompassDeg, myRadarActive, 
                     local ny = AeroUtils.Clamp(-forwardM / maxRange, -0.94, 0.94)
                     local relHdg = ((tonumber(item.hdg) or 0.0) - (tonumber(myCompassDeg) or 0.0)) % 360.0
 
+                    -- Preserva a identificação e a diferença de altitude existentes.
+                    -- NOVOS: matrícula (plate), altitude em FT e distância configurável.
+                    local altDiffM = (tonumber(item.z) or 0) - myCoords.z
+                    local altDiffFt = math.floor(altDiffM * 3.28084 + 0.5)
+                    local unit = (Config.Radar and Config.Radar.DistanceUnit) or 'NM'
+
                     targets[#targets + 1] = {
                         type = item.type,
                         rx = math.floor(nx * 1000) / 1000,
                         ry = math.floor(ny * 1000) / 1000,
                         relHdg = math.floor(relHdg + 0.5),
                         distM = math.floor(dist),
-                        altDiff = math.floor((item.z or 0) - myCoords.z),
+                        distLabel = AeroMissionDefs.FormatDistance(dist, unit),
+                        distanceUnit = unit,
+                        plate = tostring(item.plate or 'S/PLACA'),
+                        altDiff = math.floor(altDiffM),      -- campo original preservado
+                        altDiffFt = altDiffFt,              -- diferença exata em FT
                     }
                 end
             end

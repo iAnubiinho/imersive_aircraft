@@ -216,6 +216,12 @@
         return Math.max(minV, Math.min(maxV, v));
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function worldToUV(wx, wy) {
         return {
             u: MAP_CALIB.ax * Number(wx || 0) + MAP_CALIB.bx,
@@ -552,8 +558,10 @@
             const topPct  = 50 + (Number(tgt.ry || 0) * 45);
             const rot     = Number(tgt.relHdg || 0);
 
-            const altDiffHund = Math.round((Number(tgt.altDiff || 0)) / 30);
-            const altSign = altDiffHund > 0 ? `+${altDiffHund}` : (altDiffHund < 0 ? `${altDiffHund}` : '00');
+            const altFt = Number.isFinite(Number(tgt.altDiffFt))
+                ? Math.round(Number(tgt.altDiffFt))
+                : Math.round(Number(tgt.altDiff || 0) * 3.28084);
+            const altSign = altFt > 0 ? `+${altFt} FT` : (altFt < 0 ? `${altFt} FT` : '0 FT');
 
             html += `
                 <div class="radar-blip ${isHeli ? 'heli-blip' : 'plane-blip'}"
@@ -562,6 +570,7 @@
                         ${isHeli ? SVG_HELI_BLIP : SVG_PLANE_BLIP}
                     </div>
                     <span class="blip-alt-tag">${altSign}</span>
+                    <span class="blip-info-tag">${escapeHtml(tgt.plate || 'S/PLACA')} · ${escapeHtml(tgt.distLabel || (Math.round(tgt.distM || 0) + ' M'))}</span>
                 </div>`;
         }
 
@@ -836,7 +845,7 @@
                 }
 
                 listHtml += `
-                    <div class="atc-contact-card" data-wx="${c.wx}" data-wy="${c.wy}">
+                    <div class="atc-contact-card" data-wx="${c.wx}" data-wy="${c.wy}" data-contact-id="${escapeHtml(c.id)}" data-identified="${c.identified ? '1' : '0'}">
                         <div class="card-top">
                             <span>[${acftLabel}] ${c.plate}</span>
                             <span>${c.distKm} KM</span>
@@ -857,7 +866,7 @@
                 }
 
                 listHtml += `
-                    <div class="atc-contact-card unk" data-wx="${c.wx}" data-wy="${c.wy}">
+                    <div class="atc-contact-card unk" data-wx="${c.wx}" data-wy="${c.wy}" data-contact-id="${escapeHtml(c.id)}" data-identified="0">
                         <div class="card-top">
                             <span>⚠ AERONAVE NÃO IDENTIFICADA</span>
                             <span>~${c.distKm} KM</span>
